@@ -39,6 +39,8 @@ public sealed class AttackResult
     public int WardSaved { get; set; }
     public int DamageInflicted { get; set; }
     public int ModelsSlain { get; set; }
+    /// <summary>Mortal damage the attacker suffered from the target's abilities (e.g. saves of 6).</summary>
+    public int Reflected { get; set; }
 
     public string Summary()
     {
@@ -48,6 +50,7 @@ public sealed class AttackResult
         if (WardSaved > 0) sb.Append($". Ward saved {WardSaved}");
         sb.Append($". {DamageInflicted} damage, {ModelsSlain} slain");
         if (Target.IsDestroyed) sb.Append($" - {Target.Name} DESTROYED");
+        if (Reflected > 0) sb.Append($". {Attacker.Name} suffers {Reflected} mortal damage in return" + (Attacker.IsDestroyed ? $" - {Attacker.Name} DESTROYED" : ""));
         return sb.ToString();
     }
 }
@@ -116,6 +119,8 @@ public static class AttackResolver
         var dice = s.Dice;
         var result = new AttackResult { Attacker = attacker, Target = target };
         int pool = 0;
+        int saveSixes = 0;
+        bool anyMelee = false;
 
         foreach (var (w, models) in weapons)
         {
@@ -128,6 +133,11 @@ public static class AttackResolver
             int extraAttacks = AttacksBonus(s, attacker, target, w);
             int extraDamage = DamageBonus(s, attacker, target, w);
             int damageMultiplier = DamageMultiplier(s, attacker, target, w);
+            anyMelee |= w.IsMelee;
+            // Weapon/attacker triggers (none apply to Companion weapons' bonuses except where scripted per weapon).
+            string? hitMortal = Modifiers.Amount(s, attacker, Stat.HitMortal, w.Type, target, w);
+            string? critHits = Modifiers.Amount(s, attacker, Stat.CritHits, w.Type, target, w);
+            bool hitsAreMortal = Modifiers.Find(s, attacker, Stat.HitsAreMortal, w.Type, target, w).Count > 0;
 
             for (int m = 0; m < models; m++)
                 line.Attacks += Math.Max(0, w.AttacksExpr.Roll(dice) + extraAttacks);
@@ -140,6 +150,21 @@ public static class AttackResolver
                 if (roll <= failFloor || !HitSucceeds(roll, w.Hit, hitMod)) continue;
                 bool crit = roll == 6;
                 line.Hits++;
+                if (hitMortal != null) line.MortalDamage += DiceExpression.Parse(hitMortal).Roll(dice);
+                if (hitsAreMortal)
+                {
+                    line.MortalDamage += 1;
+                    if (crit) line.Crits++;
+                    continue;
+                }
+                if (crit && critHits != null)
+                {
+                    int extra = Math.Max(1, DiceExpression.Parse(critHits).Roll(dice));
+                    line.Crits++;
+                    line.Hits += extra - 1;
+                    normalHits += extra;
+                    continue;
+                }
                 if (crit)
                 {
                     line.Crits++;
@@ -161,7 +186,9 @@ public static class AttackResolver
 
             for (int wd = 0; wd < line.Wounds; wd++)
             {
-                if (SaveSucceeds(dice.D6(), target.Warscroll.Save, saveMod, rend)) continue;
+                int saveRoll = dice.D6();
+                if (saveRoll == 6 && target.Warscroll.Save < 7) saveSixes++;
+                if (SaveSucceeds(saveRoll, target.Warscroll.Save, saveMod, rend)) continue;
                 line.FailedSaves++;
                 line.Damage += RollDamage(dice, w, extraDamage, damageMultiplier);
             }
@@ -175,6 +202,19 @@ public static class AttackResolver
         result.WardSaved = warded;
         result.DamageInflicted = inflicted;
         result.ModelsSlain = slain;
+
+        // The target's retaliation triggers, resolved after the attacks.
+        int reflect = 0;
+        if (saveSixes > 0)
+        {
+            var type = anyMelee ? AttackType.Melee : AttackType.Ranged;
+            int perSix = Modifiers.Find(s, target, Stat.SaveSixMortal, type, attacker).Sum(x => x.Modifier.Value);
+            reflect += saveSixes * perSix;
+        }
+        if (anyMelee && slain > 0 && Modifiers.Find(s, target, Stat.SlainMortalOn, AttackType.Melee, attacker).Select(x => x.Modifier.Value).DefaultIfEmpty(0).Max() is int on and > 0)
+            for (int i = 0; i < slain; i++) if (dice.D6() >= on) reflect++;
+        if (reflect > 0 && attacker.OnBattlefield)
+            result.Reflected = ApplyDamage(s, attacker, reflect).Inflicted;
         return result;
     }
 

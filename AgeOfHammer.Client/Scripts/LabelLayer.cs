@@ -53,6 +53,11 @@ public partial class LabelLayer : Control
             string? err = Screen.Engine.ValidateArrival(arriving, Screen.ArrivalPositions(arriving));
             Boxed(font, err ?? "Click to set up", mouse + new Vector2(16, 14), err == null ? Palette.Good : Palette.Bad);
         }
+        if (Screen.Engine.Pending is PendingSetUp ps && Screen.HumanDecides)
+        {
+            string? err = Screen.Engine.ValidateSetUp(ps, Screen.SetUpPositions(ps.Unit));
+            Boxed(font, err ?? "Click to set up", mouse + new Vector2(16, 14), err == null ? Palette.Good : Palette.Bad);
+        }
         if (Screen.Engine.Pending is PendingMarker pmk && Screen.HumanDecides)
         {
             string? err = Screen.Engine.ValidateMarker(pmk.Decider, pmk.Def, Screen.MouseWorld);

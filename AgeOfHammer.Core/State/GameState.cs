@@ -32,6 +32,26 @@ public enum Stat
     ChargeAfterRun,
     /// <summary>Attacks that target this unit fail on an unmodified hit roll of this value or less.</summary>
     UnmodifiedHitFailsAgainst,
+    /// <summary>Each unmodified save roll of 6 against this unit inflicts this much mortal damage on the attacker.</summary>
+    SaveSixMortal,
+    /// <summary>Each model slain by a combat attack: on a dice roll of this value or more, 1 mortal damage to the attacker.</summary>
+    SlainMortalOn,
+    /// <summary>Each hit with the weapon also inflicts Amount mortal damage.</summary>
+    HitMortal,
+    /// <summary>Each critical hit with the weapon scores Amount hits instead of 1.</summary>
+    CritHits,
+    /// <summary>Flag: each hit with the weapon inflicts 1 mortal damage and the attack sequence ends.</summary>
+    HitsAreMortal,
+    /// <summary>Enemy abilities and spells that target this unit are ignored on a dice roll of this value or more.</summary>
+    ResistAbilities,
+    /// <summary>Enemy spells that target this unit are ignored on a dice roll of this value or more.</summary>
+    ResistSpells,
+    /// <summary>Modifier to chanting rolls.</summary>
+    Chant,
+    /// <summary>Flag: charge rolls can be re-rolled for free.</summary>
+    ChargeReroll,
+    /// <summary>The unit may fight once more this phase (consumed when it fights; it then has STRIKE-LAST).</summary>
+    ExtraFight,
 }
 
 public enum Expiry { EndOfPhase, EndOfTurn, EndOfRound, UntilYourNextTurn, Permanent }
@@ -78,6 +98,7 @@ public sealed class Unit
     public bool Fought { get; set; }
     public bool ReceivedCommandThisPhase { get; set; }
     public int CastsThisPhase { get; set; }
+    public int ChantsThisPhase { get; set; }
 
     public List<Buff> Buffs { get; } = new();
 

@@ -120,8 +120,9 @@ public sealed partial class GameEngine
         }
         State.Write($"{caster.Name} casts {spell.Name} ({roll} vs {spell.CastingValue}).");
         if (!spell.IsScripted) State.Write($"({spell.Name} has no scripted effect yet.)");
-        foreach (var effect in spell.AllEffects)
-            ApplyEffect(effect, caster, effect.To == "self" ? caster : target, spell.Name, roll);
+        else if (target.Owner == caster.Owner || !Resists(target, spell: true, spell.Name))
+            ApplyEffects(spell.AllEffects, caster, target, spell.Name, roll, first: true);
+        FlushQueuedPending();
         CheckWipeout();
         return ActionResult.Success;
     }
@@ -331,6 +332,11 @@ public sealed partial class GameEngine
         unit.ChargeAttempted = true;
         int roll = ChargeRoll(unit);
         State.Write($"{unit.Name} declares a charge: rolled {roll}\".");
+        if (!ChargeReachable(unit, roll) && Modifiers.HasFlag(State, unit, Stat.ChargeReroll))
+        {
+            roll = ChargeRoll(unit);
+            State.Write($"{unit.Name} re-rolls the charge (ability): {roll}\".");
+        }
         bool canReroll = CanUseCommand(player, Commands.ForwardToVictory, unit);
         if (!ChargeReachable(unit, roll) && !canReroll)
         {
@@ -426,6 +432,13 @@ public sealed partial class GameEngine
             options = options with { ExtraHit = 1 };
         }
 
+        ExecuteFight(unit, target, options, () => AfterUnitFought(f.Player, unit, () => AfterFight(f.Player)));
+        return ActionResult.Success;
+    }
+
+    /// <summary>Pile in, then attack with every melee weapon in range of the target.</summary>
+    private void ExecuteFight(Unit unit, Unit target, AttackOptions options, Action then)
+    {
         var pile = Placement.PileIn(State, unit, target);
         var alive = unit.Alive.ToList();
         for (int i = 0; i < alive.Count; i++) alive[i].Position = pile[i];
@@ -437,7 +450,56 @@ public sealed partial class GameEngine
             if (w.ModelsWithWeapon is int cap) models = Math.Min(models, cap);
             return (w, models);
         }));
-        BeginAttack(unit, target, weapons, options, () => AfterFight(f.Player));
+        BeginAttack(unit, target, weapons, options, then);
+    }
+
+    /// <summary>After a unit fights: "fight twice" abilities, then follow-up fights (e.g. Furious Retribution).</summary>
+    private void AfterUnitFought(int player, Unit unit, Action then)
+    {
+        if (State.Phase == Phase.GameOver) return;
+        var extra = unit.Buffs.FirstOrDefault(b => b.Stat == Stat.ExtraFight && b.Value > 0);
+        if (extra != null && unit.OnBattlefield)
+        {
+            unit.Buffs.Remove(extra);
+            unit.Fought = false;
+            unit.Buffs.Add(new Buff(extra.Source, Stat.StrikeLast, 1, Expiry.EndOfTurn));
+            State.Write($"{unit.Name} can fight again this phase ({extra.Source}), but has STRIKE-LAST.");
+        }
+
+        foreach (var ability in Modifiers.AbilitiesOf(State, unit).Where(a => a.FollowUp != null))
+        {
+            string key = $"phase{State.BattleRound}.{(State.SecondTurnOfRound ? 2 : 1)}.{State.Phase}|U{unit.Id}|{ability.Name}";
+            if (State.UsedAbilities.Contains(key) || !unit.OnBattlefield) continue;
+            var fu = ability.FollowUp!;
+            var candidates = State.LiveUnitsOf(unit.Owner)
+                .Where(u => u != unit && IsEligibleToFight(u) && FightTargets(u).Any()
+                            && GameState.Distance(u, unit) <= fu.Range + Geo.Epsilon
+                            && fu.Keywords.All(u.Warscroll.HasKeyword) && !fu.ExcludeKeywords.Any(u.Warscroll.HasKeyword))
+                .ToList();
+            if (candidates.Count == 0) continue;
+            State.UsedAbilities.Add(key);
+            Pending = new PendingFollowUp { Decider = player, Source = unit, Ability = ability, Candidates = candidates, Then = then };
+            return;
+        }
+        then();
+    }
+
+    private ActionResult DoFollowUpFight(PendingFollowUp pf, Fight f)
+    {
+        var unit = State.GetUnit(f.UnitId);
+        var target = State.GetUnit(f.TargetId);
+        if (!pf.Candidates.Contains(unit)) return ActionResult.Fail($"{unit.Name} cannot fight now.");
+        if (!FightTargets(unit).Contains(target)) return ActionResult.Fail("Target is out of reach.");
+        Pending = null;
+        State.Write($"{pf.Source.Name}: {pf.Ability.Name} - {unit.Name} fights next.");
+        foreach (var fx in pf.Ability.FollowUp!.Effects) ApplyEffect(fx, pf.Source, unit, pf.Ability.Name, 0);
+        var options = new AttackOptions();
+        if (f.AllOutAttack && CanUseCommand(f.Player, Commands.AllOutAttack, unit))
+        {
+            PayCommand(f.Player, Commands.AllOutAttack, unit);
+            options = options with { ExtraHit = 1 };
+        }
+        ExecuteFight(unit, target, options, () => AfterUnitFought(f.Player, unit, pf.Then ?? (() => { })));
         return ActionResult.Success;
     }
 

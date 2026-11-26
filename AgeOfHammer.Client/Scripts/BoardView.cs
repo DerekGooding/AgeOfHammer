@@ -211,6 +211,14 @@ public partial class BoardView : Node2D
             DrawCircle(G(Screen.MouseWorld), pmk.Def.Radius * Px, (ok ? Palette.Good : Palette.Bad) with { A = 0.6f }, true, -1, true);
         }
 
+        // Ability set-up ghost
+        if (engine.Pending is PendingSetUp ps && Screen.HumanDecides && Screen.MouseOverBoard)
+        {
+            var pos = Screen.SetUpPositions(ps.Unit);
+            bool ok = engine.ValidateSetUp(ps, pos) == null;
+            foreach (var p in pos) FillBase(ps.Unit.BaseAt(p), (ok ? Palette.Good : Palette.Bad) with { A = 0.6f });
+        }
+
         // Reserve arrival ghost
         if (Screen.ArrivingUnit is { } arriving && Screen.MouseOverBoard)
         {

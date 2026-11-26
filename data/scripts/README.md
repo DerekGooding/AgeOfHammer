@@ -55,6 +55,15 @@ Mark simplifications with an `// APPROX:` comment so they can be found and impro
 | `NoCommands` | Flag: the unit can't use or receive commands. |
 | `NoRetreatDamage` | Flag: retreating inflicts no mortal damage. |
 | `ShootAfterRun`, `ChargeAfterRun` | Flags: can shoot or charge after running or retreating. |
+| `SaveSixMortal` | Defensive: each unmodified save roll of 6 inflicts `value` mortal damage on the attacker (Extremis Chamber). |
+| `SlainMortalOn` | Defensive: for each model slain by combat attacks, a dice roll of `value`+ inflicts 1 mortal damage on the attacker (Spreaders of Filth). |
+| `HitMortal` | Weapon: each hit also inflicts `amount` mortal damage, e.g. `"D3"`. |
+| `CritHits` | Weapon: each critical hit scores `amount` hits, e.g. `"D6"`. |
+| `HitsAreMortal` | Flag, weapon: each hit inflicts 1 mortal damage and the attack sequence ends. |
+| `ResistAbilities`, `ResistSpells` | Enemy abilities or spells that target this unit are ignored on a roll of `value`+. Add `"oncePerTurn": true` for Ruination Chamber. |
+| `Chant` | Modifies chanting rolls. |
+| `ChargeReroll` | Flag: a failed charge roll is re-rolled for free. |
+| `ExtraFight` | Usually given as a buff: the unit fights once more this phase, then has STRIKE-LAST. |
 
 ### Conditions
 
@@ -84,6 +93,9 @@ The ability's timing (phase, and whose turn) and how often it can be used come f
 | `roll` and `success` | A gate, e.g. `"D6"` and `3` means "roll a dice; on a 3+...". |
 | `perTarget` | Roll the gate separately for each target. |
 | `rollCount` | `"models"` rolls one gate dice per model in the user's unit, and the best roll counts ("if any roll is a 6"). |
+
+**Prayers.** Abilities imported with a prayer cost, such as Lightning Tempest (chanting value 5), are chanted by Priests. The engine makes a chanting roll of D6 plus `Chant` modifiers against the chanting value, and an answered prayer's effects use that roll as `"roll"`. Each prayer can be used once per turn per army, and a Priest can chant up to their PRIEST (N) level per phase.
+*APPROX: ritual points are not modelled yet; check against the core rules.*
 | `effects` | The list of effects; see below. |
 | `auto` | The engine uses the ability itself, e.g. for end-of-turn heals. |
 
@@ -101,7 +113,22 @@ These are also used by spells (`"effect"` plus `"effects"`).
 | `returnModels` | `amount` | Return slain models. |
 | `buff` | `stat`, `value`, `attackType`, `weapon`, `expiry` | Add `value` to `stat`. `expiry` is `EndOfPhase`, `EndOfTurn` (the default), `EndOfRound`, `UntilYourNextTurn` or `Permanent`. |
 
-Any effect can include `"to": "self"` to apply to the user instead of the target.
+| `table` | `dice`, `table` | Roll `dice` and apply the matching row: `[ { "min": 1, "max": 1, "label": "...", "effects": [...] }, ... ]`. |
+| `move` | `amount` (dice, or `"Move"`), `moveKind` | The recipient may move: `normal`, or `retreat` (may leave combat, no mortal damage). |
+| `setUp` | `minEnemyDistance`, `withinOfUser` | The recipient is removed and set up again. |
+
+Any effect can include `"to": "self"` to apply to the user instead of the target. An effect with `"area": 13` (and `"side": "enemy"` or `"friendly"`) applies to every unit of that side within 13" of the user instead of the target.
+
+## Follow-up fights: `"followUp": { ... }`
+
+This covers "pick a friendly ... unit within this unit's combat range that has not fought; it can fight immediately after":
+
+```jsonc
+"Furious Retribution": { "followUp": { "keywords": ["WARRIOR CHAMBER", "INFANTRY"], "excludeKeywords": ["HERO"],
+                                       "effects": [ { "type": "buff", "stat": "Wound", "value": 1 } ] } }
+```
+
+After the unit fights, its player chooses a candidate to fight next, or declines. The `effects` are applied to the unit that fights next. Normal alternation then resumes.
 
 ## Reserves: `"reserve": { ... }`
 
@@ -145,9 +172,10 @@ If the ability's timing is "Start of Battle Round", the player is asked to place
 
 These still need engine support and stay as text for now:
 - tokens
-- extra fight activations
-- reactions such as Ruination Chamber or "after a save roll of 6"
-- re-rolls
-- abilities with results tables
-- abilities that move or set up units
+- keywords gained during the battle (HUNTED, SOULBURNED, questmarked)
+- conditions on what happened earlier in the turn (e.g. "damaged by this weapon this turn")
+- re-rolls other than charges
+- triggers when a unit is destroyed
+- moves that pass through models or combat ranges and strike units they cross
+- prayers' ritual points
 - faction rule groups (formations, heroic traits, artefacts and lores), which wait on the list builder

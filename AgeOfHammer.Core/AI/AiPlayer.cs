@@ -61,6 +61,20 @@ public sealed class AiPlayer
             case PendingAbilityWindow: return TryAbility(e) ?? new DoneAbilities(Player);
             case PendingMarker pmk:
                 return new PlaceMarker(Player, Placement.FindMarkerSpot(e, Player, pmk.Def, ForwardObjective(e)));
+            case PendingFollowUp pf:
+            {
+                var best = pf.Candidates
+                    .SelectMany(u => e.FightTargets(u).Select(t => (u, t, dmg: MeleeThreat(e, u, t))))
+                    .OrderByDescending(x => x.dmg).FirstOrDefault();
+                return best.u != null ? new Fight(Player, best.u.Id, best.t.Id) : new DeclineReaction(Player);
+            }
+            case PendingSetUp ps:
+            {
+                // Abilities that re-deploy a unit: go where the action is (an enemy to attack, or an objective).
+                var desired = ps.Anchor is { } anchor && ps.WithinOfAnchor != null ? anchor.Centroid : ForwardObjective(e);
+                var pos = Placement.FindSetUp(e, ps, desired);
+                return pos != null ? new CompleteMove(Player, pos) : new CancelMove(Player);
+            }
         }
 
         if (s.Phase != Phase.Deployment && TryAbility(e) is { } ability) return ability;
@@ -136,7 +150,8 @@ public sealed class AiPlayer
                 }
                 if (HurtsRecipient(fx) && t.WoundsRemaining < 4) return false; // don't hurt fragile friends
             }
-            return effects.All(fx => fx.To == "self");
+            // Tables, area effects, moves and set-ups are generally worth using.
+            return effects.Any(fx => fx.Type is "table" or "move" or "setUp" || fx.Area != null) || effects.All(fx => fx.To == "self");
         });
         return useful.OrderByDescending(t => t.Warscroll.Points).FirstOrDefault();
     }
@@ -212,8 +227,14 @@ public sealed class AiPlayer
             return new CancelMove(Player);
         }
 
-        var goal = _moveGoal ?? DefaultGoal(e, pm.Unit);
-        if (pm.Kind == MoveKind.Redeploy) goal = DefaultGoal(e, pm.Unit);
+        var goal = e.State.Phase == Phase.Movement && pm.Kind != MoveKind.Redeploy ? _moveGoal ?? DefaultGoal(e, pm.Unit) : DefaultGoal(e, pm.Unit);
+        if (pm.Kind == MoveKind.Retreat && !pm.Unit.Moved)
+        {
+            // A free retreat from an ability: get away from the nearest enemy.
+            var threat = e.State.EnemiesOf(pm.Unit).OrderBy(en => GameState.Distance(pm.Unit, en)).FirstOrDefault();
+            if (threat != null && pm.Unit.Centroid != threat.Centroid)
+                goal = pm.Unit.Centroid + Vector2.Normalize(pm.Unit.Centroid - threat.Centroid) * (pm.Allowance + 1);
+        }
         var positions = Placement.MoveToward(e, pm, goal);
         return positions != null ? new CompleteMove(Player, positions) : new CancelMove(Player);
     }

@@ -93,6 +93,48 @@ public sealed partial class GameEngine
         return null;
     }
 
+    /// <summary>Checks positions for a unit being set up again by an ability. Returns null if legal.</summary>
+    public string? ValidateSetUp(PendingSetUp ps, IReadOnlyList<Vector2> positions)
+    {
+        var unit = ps.Unit;
+        if (positions.Count != unit.AliveCount) return $"Expected {unit.AliveCount} positions.";
+        foreach (var p in positions)
+        {
+            var b = unit.BaseAt(p);
+            if (!Geo.Inside(State.Bounds, b)) return "Models must be set up on the battlefield.";
+            if (OverlapsTerrain(b)) return "Models cannot be set up on impassable terrain.";
+            foreach (var e in State.EnemiesOf(unit))
+                foreach (var m in e.Alive)
+                    if (Geo.Distance(b, e.BaseOf(m)) <= ps.MinEnemyDistance)
+                        return $"Models must be set up more than {ps.MinEnemyDistance}\" from all enemy units.";
+            if (ps.Anchor is { } anchor && ps.WithinOfAnchor is float within && anchor != unit
+                && anchor.Alive.All(am => Geo.Gap(b, anchor.BaseOf(am)) + 2 * unit.BaseReach > within + Geo.Epsilon))
+                return $"Models must be set up wholly within {within}\" of {anchor.Name}.";
+        }
+        // The unit is being moved, so its own current models don't block it.
+        var others = State.Units.Where(u => u != unit && u.OnBattlefield).ToList();
+        var bases = positions.Select(unit.BaseAt).ToList();
+        for (int i = 0; i < bases.Count; i++)
+        {
+            for (int j = i + 1; j < bases.Count; j++) if (Geo.Overlaps(bases[i], bases[j])) return "Models cannot overlap other models.";
+            if (others.Any(u => u.Alive.Any(m => Geo.Overlaps(bases[i], u.BaseOf(m))))) return "Models cannot overlap other models.";
+        }
+        if (!Geo.IsCoherent(bases, CoherencyRange(unit))) return "Unit must be set up in coherency.";
+        return null;
+    }
+
+    private ActionResult DoSetUp(PendingSetUp ps, CompleteMove cm)
+    {
+        var error = ValidateSetUp(ps, cm.Positions);
+        if (error != null) return ActionResult.Fail(error);
+        var alive = ps.Unit.Alive.ToList();
+        for (int i = 0; i < alive.Count; i++) alive[i].Position = cm.Positions[i];
+        ps.Unit.SetUpThisTurn = true;
+        Pending = null;
+        State.Write($"{ps.Unit.Name} is set up again ({ps.Source}).");
+        return ActionResult.Success;
+    }
+
     private ActionResult DoArrive(ArriveFromReserve a)
     {
         var unit = State.GetUnit(a.UnitId);

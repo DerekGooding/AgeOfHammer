@@ -101,6 +101,42 @@ public sealed class EffectDef
     public string Expiry { get; set; } = "EndOfTurn";
     /// <summary>"target" (default) or "self" (the unit using the ability).</summary>
     public string To { get; set; } = "target";
+    /// <summary>Instead of the target: apply to every unit of <see cref="Side"/> within this many inches of the user.</summary>
+    public float? Area { get; set; }
+    /// <summary>"enemy" (default) or "friendly", for <see cref="Area"/>.</summary>
+    public string Side { get; set; } = "enemy";
+    /// <summary>For "table": the dice rolled to pick a row.</summary>
+    public string Dice { get; set; } = "D6";
+    /// <summary>For "table": rows matched against the roll of <see cref="Dice"/>.</summary>
+    public List<TableRowDef> Table { get; set; } = new();
+    /// <summary>For "move": "normal" (cannot end in combat) or "retreat" (may leave combat, no mortal damage).</summary>
+    public string MoveKind { get; set; } = "normal";
+    /// <summary>For "setUp": every model must be set up more than this far from all enemy units.</summary>
+    public float MinEnemyDistance { get; set; } = 9;
+    /// <summary>For "setUp": every model must be wholly within this many inches of the unit that used the ability.</summary>
+    public float? WithinOfUser { get; set; }
+}
+
+/// <summary>A row of a results table: applies when the roll is between <see cref="Min"/> and <see cref="Max"/>.</summary>
+public sealed class TableRowDef
+{
+    public int Min { get; set; }
+    public int Max { get; set; }
+    public string Label { get; set; } = "";
+    public List<EffectDef> Effects { get; set; } = new();
+}
+
+/// <summary>
+/// "Pick a friendly ... unit within this unit's combat range that has not fought; it can fight immediately after
+/// this unit" (Lord-Celestant's Furious Retribution and similar).
+/// </summary>
+public sealed class FollowUpDef
+{
+    public float Range { get; set; } = 3;
+    public List<string> Keywords { get; set; } = new();
+    public List<string> ExcludeKeywords { get; set; } = new();
+    /// <summary>Buffs given to the unit that fights next (e.g. +1 to wound).</summary>
+    public List<EffectDef> Effects { get; set; } = new();
 }
 
 /// <summary>Who an aura affects, measured from the unit that has the ability.</summary>
@@ -130,12 +166,18 @@ public sealed class PassiveModifierDef
 {
     /// <summary>
     /// Hit, Wound, Rend, Attacks, Damage, Save, Ward, Move, Control, Charge, ChargeDice, Cast, StrikeFirst, StrikeLast,
-    /// HitAgainst (attacks that target this unit), WoundAgainst, MaxControl, NoRetreatDamage, CoherencyRange.
+    /// HitAgainst (attacks that target this unit), WoundAgainst, MaxControl, NoRetreatDamage, CoherencyRange,
+    /// attack triggers (SaveSixMortal, SlainMortalOn, HitMortal, CritHits, HitsAreMortal), resistances
+    /// (ResistAbilities, ResistSpells), Chant, ChargeReroll.
     /// </summary>
     public string Stat { get; set; } = "Hit";
     public int Value { get; set; }
     /// <summary>Multiply the stat instead of adding (e.g. 2 = double Damage). Applied after additions.</summary>
     public int? Multiply { get; set; }
+    /// <summary>Dice amount for attack triggers such as HitMortal ("D3") or CritHits ("D6").</summary>
+    public string? Amount { get; set; }
+    /// <summary>The effect can trigger at most once per turn for its army (e.g. Ruination Chamber).</summary>
+    public bool OncePerTurn { get; set; }
     public string AttackType { get; set; } = "Any";
     /// <summary>Only affect attacks with weapons whose name contains this text.</summary>
     public string? Weapon { get; set; }
@@ -208,12 +250,14 @@ public sealed class AbilityDef
     public List<PassiveModifierDef> Modifiers { get; set; } = new();
     /// <summary>Optional: makes an active ability usable by the engine (see <see cref="ActivationDef"/>).</summary>
     public ActivationDef? Activate { get; set; }
+    /// <summary>Optional: after this unit fights, a friendly unit may fight immediately afterwards.</summary>
+    public FollowUpDef? FollowUp { get; set; }
     /// <summary>Optional: puts units into, or brings them out of, a reserve pool (deep strike, tunnels...).</summary>
     public ReserveDef? Reserve { get; set; }
     /// <summary>Optional: lets the player place a battlefield marker (e.g. a Gnawhole) at this ability's timing.</summary>
     public MarkerDef? Marker { get; set; }
 
-    [JsonIgnore] public bool IsScripted => Modifiers.Count > 0 || Activate != null || Reserve != null || Marker != null || ScriptId != null;
+    [JsonIgnore] public bool IsScripted => Modifiers.Count > 0 || Activate != null || Reserve != null || Marker != null || FollowUp != null || ScriptId != null;
 
     /// <summary>How often it can be used, from the printed timing.</summary>
     [JsonIgnore]

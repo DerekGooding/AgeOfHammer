@@ -247,7 +247,7 @@ public class ScriptDataTests
                 foreach (var m in a.Modifiers) Assert.True(Enum.TryParse<Stat>(m.Stat, true, out _), $"{a.Name}: unknown stat {m.Stat}");
                 foreach (var fx in a.Activate?.Effects ?? [])
                 {
-                    Assert.Contains(fx.Type, new[] { "mortal", "mortalPerModel", "mortalDice", "slayRoll", "heal", "returnModels", "buff" });
+                    Assert.Contains(fx.Type, new[] { "mortal", "mortalPerModel", "mortalDice", "slayRoll", "heal", "returnModels", "buff", "table", "move", "setUp" });
                     if (fx.Type == "buff") Assert.True(Enum.TryParse<Stat>(fx.Stat, true, out _), $"{a.Name}: unknown stat {fx.Stat}");
                 }
             }

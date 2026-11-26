@@ -100,6 +100,26 @@ public sealed class PendingMarker : PendingDecision
     public Action? Then { get; init; }
 }
 
+/// <summary>After a unit fought, its player may pick a friendly unit (one of <see cref="Candidates"/>) to fight next.
+/// Answer with a <see cref="Fight"/> for a candidate, or <see cref="DeclineReaction"/>.</summary>
+public sealed class PendingFollowUp : PendingDecision
+{
+    public required Unit Source { get; init; }
+    public required AgeOfHammer.Core.Data.AbilityDef Ability { get; init; }
+    public required List<Unit> Candidates { get; init; }
+    public Action? Then { get; init; }
+}
+
+/// <summary>An ability removed a unit to set it up again: answer with <see cref="CompleteMove"/> (positions) or <see cref="CancelMove"/>.</summary>
+public sealed class PendingSetUp : PendingDecision
+{
+    public required Unit Unit { get; init; }
+    public float MinEnemyDistance { get; init; } = 9;
+    public Unit? Anchor { get; init; }
+    public float? WithinOfAnchor { get; init; }
+    public required string Source { get; init; }
+}
+
 /// <summary>At the end of a phase the non-active player may use their abilities for that phase.</summary>
 public sealed class PendingAbilityWindow : PendingDecision
 {

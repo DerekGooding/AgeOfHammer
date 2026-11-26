@@ -47,7 +47,9 @@ public sealed partial class GameEngine
         };
     }
 
-    private string UsageKey(Unit unit, AbilityDef ability) => ability.Frequency switch
+    private string UsageKey(Unit unit, AbilityDef ability) => ability.CostKind == "prayer"
+        ? $"turn{State.BattleRound}.{(State.SecondTurnOfRound ? 2 : 1)}|P{unit.Owner}|prayer|{ability.Name}" // each prayer once per turn per army
+        : ability.Frequency switch
     {
         "battle-army" => $"battle|P{unit.Owner}|{ability.Name}",
         "battle-unit" => $"battle|U{unit.Id}|{ability.Name}",
@@ -62,6 +64,7 @@ public sealed partial class GameEngine
         var act = ability.Activate;
         if (act == null || !unit.OnBattlefield || !TimingMatches(unit, ability)) return false;
         if (State.UsedAbilities.Contains(UsageKey(unit, ability))) return false;
+        if (ability.CostKind == "prayer" && unit.ChantsThisPhase >= Math.Max(1, unit.Warscroll.PriestLevel)) return false;
         if (!Modifiers.ConditionHolds(State, act.Requires, unit, unit, null)) return false;
         return act.Target == "self" ? Modifiers.ConditionHolds(State, act.TargetRequires, unit, unit, unit) : AbilityTargets(unit, ability).Count > 0;
     }
@@ -142,6 +145,19 @@ public sealed partial class GameEngine
         State.Write($"{label}" + (act.Target == "self" ? "" : $" -> {string.Join(", ", targets.Select(t => t.Name))}"));
 
         int sharedRoll = 0;
+        if (ability.CostKind == "prayer")
+        {
+            // APPROX: chanting roll of D6 + modifiers against the chanting value; ritual points are not modelled.
+            unit.ChantsThisPhase++;
+            int chant = State.Dice.D6() + Modifiers.Get(State, unit, Stat.Chant, AttackType.Any);
+            if (chant < (ability.CostValue ?? 0))
+            {
+                State.Write($"  chanting roll {chant} (needs {ability.CostValue}+): the prayer is not answered.");
+                return;
+            }
+            State.Write($"  chanting roll {chant}: the prayer is answered.");
+            sharedRoll = chant;
+        }
         if (act.Roll != null && !act.PerTarget)
         {
             sharedRoll = GateRoll(unit, act);
@@ -165,14 +181,69 @@ public sealed partial class GameEngine
                     continue;
                 }
             }
-            foreach (var effect in act.Effects)
-            {
-                var recipient = effect.To == "self" ? unit : target;
-                if (effect.To == "self" && target != targets[0]) continue; // self effects happen once
-                ApplyEffect(effect, unit, recipient, ability.Name, roll);
-            }
+            if (target.Owner != unit.Owner && Resists(target, spell: false, ability.Name)) continue;
+            ApplyEffects(act.Effects, unit, target, ability.Name, roll, first: target == targets[0]);
         }
         CheckWipeout();
+        FlushQueuedPending();
+    }
+
+    /// <summary>Applies a list of effects for one target. Self and area effects happen once (for the first target).</summary>
+    private void ApplyEffects(IEnumerable<EffectDef> effects, Unit user, Unit target, string name, int roll, bool first)
+    {
+        foreach (var effect in effects)
+        {
+            if (effect.Area is float area)
+            {
+                if (!first) continue;
+                bool enemy = effect.Side != "friendly";
+                foreach (var u in State.Units.Where(u => u.OnBattlefield && (u.Owner != user.Owner) == enemy && u != user
+                                                          && GameState.Distance(u, user) <= area + Geo.Epsilon).ToList())
+                    if (!enemy || !Resists(u, spell: false, name)) ApplyEffect(effect, user, u, name, roll);
+                continue;
+            }
+            if (effect.To == "self")
+            {
+                if (first) ApplyEffect(effect, user, user, name, roll);
+                continue;
+            }
+            ApplyEffect(effect, user, target, name, roll);
+        }
+    }
+
+    /// <summary>
+    /// Resistance rolls (e.g. Ruination Chamber: "on a 4+, that ability has no effect on this unit").
+    /// Returns true if the target ignores the ability or spell.
+    /// </summary>
+    public bool Resists(Unit target, bool spell, string source)
+    {
+        var mods = Modifiers.Find(State, target, Stat.ResistAbilities);
+        if (spell) mods.AddRange(Modifiers.Find(State, target, Stat.ResistSpells));
+        foreach (var (m, from) in mods.OrderBy(x => x.Modifier.Value))
+        {
+            string key = $"turn{State.BattleRound}.{(State.SecondTurnOfRound ? 2 : 1)}|P{target.Owner}|resist|{m.Stat}";
+            if (m.OncePerTurn && State.UsedAbilities.Contains(key)) continue;
+            if (m.OncePerTurn) State.UsedAbilities.Add(key);
+            int roll = State.Dice.D6();
+            if (roll >= m.Value)
+            {
+                State.Write($"  {target.Name} resists {source} (rolled {roll}).");
+                return true;
+            }
+            State.Write($"  {target.Name} fails to resist {source} (rolled {roll}).");
+            return false;
+        }
+        return false;
+    }
+
+    private PendingDecision? _queuedPending;
+
+    /// <summary>Move/set-up effects queue a decision; it becomes active once the ability has fully resolved.</summary>
+    private void FlushQueuedPending()
+    {
+        if (_queuedPending == null || State.Phase == Phase.GameOver) { _queuedPending = null; return; }
+        if (Pending == null || Pending is PendingAbilityWindow) Pending = _queuedPending;
+        _queuedPending = null;
     }
 
     /// <summary>The gate roll; with RollCount "models", one dice per model and the best result counts.</summary>
@@ -247,6 +318,32 @@ public sealed partial class GameEngine
                 State.Write($"  {name}: {returned} model(s) returned to {recipient.Name}.");
                 break;
             }
+            case "table":
+            {
+                int r = DiceExpression.Parse(effect.Dice).Roll(State.Dice);
+                var row = effect.Table.FirstOrDefault(t => r >= t.Min && r <= t.Max);
+                State.Write($"  {name}: rolled {r}" + (row != null && row.Label.Length > 0 ? $" - {row.Label}" : ""));
+                if (row != null) ApplyEffects(row.Effects, source, recipient, name, r, first: true);
+                break;
+            }
+            case "move":
+            {
+                if (_queuedPending != null || !recipient.OnBattlefield) break;
+                int distance = effect.Amount.Equals("Move", StringComparison.OrdinalIgnoreCase) ? MoveCharacteristic(recipient) : Amount();
+                var kind = effect.MoveKind == "retreat" ? MoveKind.Retreat : MoveKind.Normal;
+                State.Write($"  {name}: {recipient.Name} can move up to {distance}\".");
+                _queuedPending = new PendingMove { Decider = recipient.Owner, Unit = recipient, Kind = kind, Allowance = distance };
+                break;
+            }
+            case "setUp":
+                if (_queuedPending != null || !recipient.OnBattlefield) break;
+                State.Write($"  {name}: {recipient.Name} is removed and set up again.");
+                _queuedPending = new PendingSetUp
+                {
+                    Decider = recipient.Owner, Unit = recipient, MinEnemyDistance = effect.MinEnemyDistance,
+                    Anchor = effect.WithinOfUser != null ? source : null, WithinOfAnchor = effect.WithinOfUser, Source = name,
+                };
+                break;
             case "buff":
                 if (Enum.TryParse<Stat>(effect.Stat, true, out var stat))
                 {

@@ -94,6 +94,17 @@ public sealed partial class GameEngine
                     return ActionResult.Success;
                 case (PendingAbilityWindow, UseAbility ua): return DoUseAbility(ua);
                 case (PendingMarker pmk, PlaceMarker pl): return DoPlaceMarker(pmk, pl);
+                case (PendingFollowUp pf, Fight f): return DoFollowUpFight(pf, f);
+                case (PendingFollowUp pf, DeclineReaction):
+                    Pending = null;
+                    State.Write($"{pf.Source.Name}: no follow-up fight.");
+                    pf.Then?.Invoke();
+                    return ActionResult.Success;
+                case (PendingSetUp ps, CompleteMove cm): return DoSetUp(ps, cm);
+                case (PendingSetUp ps, CancelMove):
+                    Pending = null;
+                    State.Write($"{ps.Unit.Name} stays where it is.");
+                    return ActionResult.Success;
                 case (PendingAbilityWindow, DoneAbilities):
                     Pending = null;
                     EndPhaseFlow();
@@ -230,6 +241,7 @@ public sealed partial class GameEngine
         {
             u.Shot = u.Fought = u.ReceivedCommandThisPhase = false;
             u.CastsThisPhase = 0;
+            u.ChantsThisPhase = 0;
             u.Buffs.RemoveAll(b => b.Expiry == Expiry.EndOfPhase);
         }
         foreach (var p in State.Players) p.CommandsUsedThisPhase.Clear();

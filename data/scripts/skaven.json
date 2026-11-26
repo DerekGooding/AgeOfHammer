@@ -1,8 +1,9 @@
 {
   // Skaven ability scripts. Applied on load to data/factions/skaven.json (see data/scripts/README.md).
   // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): Warp-Grinder's Tunnel Skulkers,
-  // tokens (Bomb Rats), Hidden Weapon Team visibility, re-rolls, results tables (Peal of Doom, Too Horrible to Die),
-  // extra FIGHT activations, move-and-strike abilities (Rolling Doom, Smoke Bombs).
+  // tokens (Bomb Rats), Hidden Weapon Team visibility, chanting re-rolls, "when destroyed" (Too Horrible to Die),
+  // move-and-strike abilities (Rolling Doom, Smoke Bombs, Shadowblood Cloak, Burst From The Shadows), weapons whose
+  // profile is "See below" (Warp Lightning Blast).
   "abilities": {
     // ----- Battle traits
     "The Lurking Vermintide": { "reserve": { "pool": "tunnels below", "declare": true } },
@@ -10,6 +11,12 @@
     "Splinters Of The Vermindoom": { "marker": { "name": "Gnawhole", "minEnemyDistance": 9, "minObjectiveDistance": 3, "minTerrainDistance": 1, "radius": 1.5 } },
     "Grinderfist Tunnellers": { "reserve": { "pool": "tunnels below", "arrive": { "minEnemyDistance": 9 } } },
     "Too Quick To Hit-Hit": { "modifiers": [ { "stat": "NoRetreatDamage", "value": 1, "condition": "keywordAny:INFANTRY|CAVALRY" } ] },
+
+    // ----- Attack triggers and follow-up fights
+    "Spreaders Of Filth And Disease": { "modifiers": [ { "stat": "SlainMortalOn", "value": 6 } ] },
+    "Shock Gauntlets": { "modifiers": [ { "stat": "CritHits", "amount": "D6", "weapon": "Shock Gauntlets" } ] },
+    "Gnash-Gnaw On Their Bones!": { "followUp": { "keywords": ["VERMINUS", "INFANTRY"], "excludeKeywords": ["HERO"],
+      "effects": [ { "type": "buff", "stat": "Hit", "value": 1 } ] } },
 
     // ----- Passive modifiers
     "Gas Clouds": { "modifiers": [ { "stat": "Damage", "value": 1, "weapon": "Poisoned Wind", "condition": "targetModels>=10" } ] },
@@ -34,6 +41,38 @@
     "Staff Of The Horned Rat": { "modifiers": [ { "stat": "Cast", "value": 1 } ] },
 
     // ----- Activated abilities
+    // APPROX: "Wall of Unholy Sound" applies -1 to hit to all attacks of enemy units within 13" (not only combat attacks
+    // while they stay within 13"); "Apocalyptic Doom" inflicts D3 on each enemy unit within 13".
+    "Peal Of Doom": {
+      "activate": { "target": "self", "effects": [ { "type": "table", "dice": "D6", "table": [
+        { "min": 1, "max": 1, "label": "Magical Backlash", "effects": [ { "type": "mortal", "amount": "D3", "to": "self" } ] },
+        { "min": 2, "max": 4, "label": "Wall of Unholy Sound", "effects": [ { "type": "buff", "stat": "Hit", "value": -1, "attackType": "Melee", "expiry": "UntilYourNextTurn", "area": 13 } ] },
+        { "min": 5, "max": 6, "label": "Apocalyptic Doom", "effects": [ { "type": "mortal", "amount": "D3", "area": 13 } ] } ] } ] }
+    },
+    // APPROX: Damage D3+3 modelled as +2 Damage (average 5.5 vs 5).
+    "More-More Doom!": {
+      "phase": "shooting", "perspective": "your",
+      "activate": { "target": "self", "requires": "notMoved", "effects": [ { "type": "table", "dice": "D6", "table": [
+        { "min": 1, "max": 1, "label": "misfire", "effects": [ { "type": "mortal", "amount": "D3", "to": "self" } ] },
+        { "min": 2, "max": 6, "label": "overcharged", "effects": [ { "type": "buff", "stat": "Damage", "value": 2, "weapon": "Doomrocket", "to": "self" } ] } ] } ] }
+    },
+    "More-More Warp Energy!": {
+      "phase": "shooting", "perspective": "your",
+      "activate": { "target": "self", "requires": "notMoved", "effects": [ { "type": "table", "dice": "D6", "table": [
+        { "min": 1, "max": 1, "label": "misfire", "effects": [ { "type": "mortal", "amount": "D3", "to": "self" } ] },
+        { "min": 2, "max": 6, "label": "overcharged", "effects": [ { "type": "buff", "stat": "Damage", "value": 1, "weapon": "Warplock Musket", "to": "self" } ] } ] } ] }
+    },
+    // APPROX: +10 Attacks (3D6 more on average) and D6 mortal damage to itself for the expected unmodified 1s.
+    "More-More Warpstone Bullets!": {
+      "activate": { "target": "self", "requires": "friendlyWithin:3:SKRYRE+HERO", "effects": [
+        { "type": "buff", "stat": "Attacks", "value": 10, "weapon": "Hail of Warpstone Bullets" },
+        { "type": "mortal", "amount": "D6", "to": "self" } ] }
+    },
+    // APPROX: the friendly-target option (fight twice) is used; the enemy option is not.
+    "The Death Frenzy": {
+      "activate": { "target": "friendly", "range": 13, "targetKeywords": ["SKAVEN", "INFANTRY"],
+        "effects": [ { "type": "buff", "stat": "ExtraFight", "value": 1, "expiry": "EndOfTurn" } ] }
+    },
     // APPROX: applies -1 to hit to the enemy units within 6" when used (not to ones that move in later).
     "Warpstone Fumes": {
       "activate": { "target": "enemy", "range": 6, "maxTargets": 0, "roll": "D6", "success": 2,

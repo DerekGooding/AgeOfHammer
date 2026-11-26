@@ -40,6 +40,19 @@ public static class Modifiers
         return best;
     }
 
+    /// <summary>The applicable modifiers for a stat, with the unit they come from.</summary>
+    public static List<(PassiveModifierDef Modifier, Unit Source)> Find(GameState state, Unit unit, Stat stat,
+        AttackType type = AttackType.Any, Unit? opponent = null, WeaponProfile? weapon = null) =>
+        Applicable(state, unit, stat, type, opponent, weapon).ToList();
+
+    /// <summary>The dice amount of the first applicable modifier for a stat (e.g. HitMortal "D3"), or null.</summary>
+    public static string? Amount(GameState state, Unit unit, Stat stat, AttackType type, Unit? opponent, WeaponProfile? weapon)
+    {
+        foreach (var (m, _) in Applicable(state, unit, stat, type, opponent, weapon))
+            return m.Amount ?? m.Value.ToString();
+        return unit.Buffs.Any(b => b.Stat == stat && b.Value > 0) ? unit.Buffs.First(b => b.Stat == stat).Value.ToString() : null;
+    }
+
     public static bool HasFlag(GameState state, Unit unit, Stat stat) =>
         unit.Buffs.Any(b => b.Stat == stat && b.Value > 0) || Applicable(state, unit, stat, AttackType.Any, null, null).Any(x => x.M.Value > 0);
 
@@ -156,6 +169,15 @@ public static class Modifiers
         if (term.StartsWith("targetHealth>=")) return target != null && target.Warscroll.Health >= N(term, "targetHealth>=");
         if (term.StartsWith("targetKeyword:")) return target != null && target.Warscroll.HasKeyword(term["targetKeyword:".Length..]);
         if (term.StartsWith("targetWithin:")) return target != null && GameState.Distance(target, self) <= N(term, "targetWithin:") + Geo.Epsilon;
+        if (term.StartsWith("friendlyWithin:"))
+        {
+            // friendlyWithin:3:SKRYRE+HERO - another friendly unit with all those keywords within 3".
+            var parts = term.Split(':');
+            float range = float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+            var keywords = parts.Length > 2 ? parts[2].Split('+') : [];
+            return state.LiveUnitsOf(self.Owner).Any(u => u != self && keywords.All(u.Warscroll.HasKeyword)
+                                                          && GameState.Distance(u, self) <= range + Geo.Epsilon);
+        }
         return false;
     }
 

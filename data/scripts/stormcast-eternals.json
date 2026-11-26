@@ -1,8 +1,9 @@
 {
   // Stormcast Eternals ability scripts. Applied on load to data/factions/stormcast-eternals.json (see data/scripts/README.md).
   // "abilities" entries apply to every ability with that name; "warscrolls" entries to one warscroll.
-  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): Heavens-Sent, tokens, extra FIGHT
-  // activations, Ruination Chamber reactions, re-rolls, move-and-redeploy abilities.
+  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): Heavens-Sent, tokens
+  // (Hunting Hounds), dynamic keywords (HUNTED, SOULBURNED, questmarked), "damaged by this weapon this turn" triggers,
+  // abilities that need a specific named unit to follow up (Heroic Retribution), Windrider.
   "abilities": {
     // ----- Battle traits
     "The Celestial Realm": { "reserve": { "pool": "Celestial Realm", "declare": true } },
@@ -13,6 +14,23 @@
           { "type": "buff", "stat": "Wound", "value": 1, "attackType": "Melee" },
           { "type": "buff", "stat": "Save", "value": 1 } ] }
     },
+
+    // ----- Attack triggers and resistances
+    "Extremis Chamber": { "modifiers": [ { "stat": "SaveSixMortal", "value": 1, "attackType": "Melee" } ] },
+    "Ruination Chamber": { "modifiers": [ { "stat": "ResistAbilities", "value": 4, "oncePerTurn": true } ] },
+    "Arcane Heritage": { "modifiers": [
+      { "stat": "ResistSpells", "value": 4 },
+      { "stat": "ResistSpells", "value": 4, "aura": { "side": "friendly", "range": 12, "wholly": true,
+        "names": ["Stormdrake Guard", "Stormdrake Guard (1 model)"], "includeSelf": false } } ] },
+
+    // ----- Follow-up fights ("... can be picked to use a FIGHT ability immediately after")
+    "Furious Retribution": { "followUp": { "keywords": ["WARRIOR CHAMBER", "INFANTRY"], "excludeKeywords": ["HERO"],
+      "effects": [ { "type": "buff", "stat": "Wound", "value": 1 } ] } },
+    "Righteous Avengers": { "followUp": { "keywords": ["EXTREMIS CHAMBER", "CAVALRY"], "excludeKeywords": ["HERO"] } },
+    "Earn An Honourable Death": { "followUp": { "keywords": ["RUINATION CHAMBER", "INFANTRY"], "excludeKeywords": ["HERO"],
+      "effects": [ { "type": "buff", "stat": "Hit", "value": 1 } ] } },
+    "Vengeance Unleashed": { "followUp": { "keywords": ["WARRIOR CHAMBER"], "excludeKeywords": ["HERO"],
+      "effects": [ { "type": "buff", "stat": "Hit", "value": 1 } ] } },
 
     // ----- Passive modifiers
     "Beast": { "modifiers": [ { "stat": "MaxControl", "value": 1 } ] },
@@ -47,6 +65,42 @@
     "The Prime Huntress": { "modifiers": [ { "stat": "Damage", "multiply": 2, "weapon": "Thengavar", "condition": "targetKeyword:MONSTER" } ] },
 
     // ----- Activated abilities
+    "Deliver Judgement": {
+      "activate": { "target": "friendly", "range": 12, "wholly": true, "targetKeywords": ["RUINATION CHAMBER"], "targetExcludeKeywords": ["HERO"],
+        "effects": [ { "type": "buff", "stat": "ExtraFight", "value": 1, "expiry": "EndOfPhase" } ] }
+    },
+    // APPROX: only the first target gets the D3" move.
+    "Guided By Lightning": {
+      "activate": { "target": "friendly", "range": 12, "wholly": true, "targetKeywords": ["STORMCAST ETERNALS"], "targetRequires": "targetSetUpThisTurn",
+        "effects": [ { "type": "move", "amount": "D3" } ] }
+    },
+    // APPROX: always a Retreat-style move (it may leave combat but not end in it), without mortal damage.
+    "Light In The Dark": {
+      "activate": { "target": "friendly", "range": 12, "wholly": true, "targetNames": ["Prosecutors"], "roll": "D6", "success": 3,
+        "effects": [ { "type": "move", "amount": "Move", "moveKind": "retreat" } ] }
+    },
+    // APPROX: the Vanguard-Palladors that can come along are not moved.
+    "Ride The Winds Aetheric": {
+      "activate": { "target": "self", "requires": "notInCombat", "effects": [ { "type": "setUp", "minEnemyDistance": 9 } ] }
+    },
+    // APPROX: the Knight-Questor that can come along is not moved.
+    "Relictor Soulguide": {
+      "activate": { "target": "self", "effects": [ { "type": "setUp", "minEnemyDistance": 9 } ] }
+    },
+    // APPROX: strikes only the first unit (no lightning chain).
+    "Lightning Tempest": {
+      "activate": { "target": "enemy", "range": 12, "effects": [ { "type": "mortal", "amount": "D3" } ] }
+    },
+    // APPROX: Ward (6+) for nearby Ruination Chamber units for the turn; the healing after fights is not modelled.
+    "Prayer Of The Witness": {
+      "activate": { "target": "friendly", "range": 18, "wholly": true, "targetKeywords": ["RUINATION CHAMBER"], "maxTargets": 0,
+        "effects": [ { "type": "buff", "stat": "Ward", "value": 6 } ] }
+    },
+    // APPROX: no 2D6 move; on a 3+ an enemy unit in combat with it suffers D3 mortal damage.
+    "Draconic Onslaught": {
+      "activate": { "target": "enemy", "inCombat": true, "requires": "charged", "roll": "D6", "success": 3,
+        "effects": [ { "type": "mortal", "amount": "D3" } ] }
+    },
     "Blazing Impact": {
       "activate": { "target": "enemy", "range": 10, "maxTargets": 3, "requires": "setUpThisTurn", "roll": "D3", "success": 2, "perTarget": true,
         "effects": [ { "type": "mortal", "amount": "roll" } ] }

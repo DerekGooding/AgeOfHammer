@@ -149,6 +149,6 @@ dotnet run --project tools/AgeOfHammer.Import -- --refresh # download the latest
 - **Reserves and markers**, such as Stormcast deep strike and Skaven tunnels and Gnawholes.
 
 **Current coverage.**
-- About 45% of Stormcast Eternals and Skaven warscroll abilities are scripted, plus the core spells.
+- 71% of Stormcast Eternals and 60% of Skaven warscroll abilities are scripted, plus most spells and battle traits.
 - `dotnet run --project tools/AgeOfHammer.Balance -- --coverage` shows the coverage for every faction.
 - The script vocabulary is documented in [data/scripts/README.md](data/scripts/README.md).

@@ -342,6 +342,11 @@ public partial class BattleScreen : Node
             Do(new DeployUnit(d, DeployUnit.Id, DeploymentPositions(DeployUnit), _facing));
             return;
         }
+        if (HumanDecides && Engine.Pending is PendingSetUp ps)
+        {
+            Do(new CompleteMove(d, SetUpPositions(ps.Unit)));
+            return;
+        }
         if (HumanDecides && Engine.Pending is PendingMarker pmk)
         {
             Do(new PlaceMarker(d, MouseWorld));
@@ -394,6 +399,12 @@ public partial class BattleScreen : Node
         int perRow = Math.Max(1, Math.Min(_perRowOptions[_perRowIndex], unit.Models.Count));
         unit.Facing = _facing; // not yet on the battlefield: safe to preview the chosen orientation
         return Geo.Formation(unit.Models.Count, unit.BaseExtent, MouseWorld, perRow);
+    }
+
+    public List<NVec> SetUpPositions(Unit unit)
+    {
+        int perRow = Math.Max(1, Math.Min(_perRowOptions[_perRowIndex], unit.AliveCount));
+        return Geo.Formation(unit.AliveCount, unit.BaseExtent, MouseWorld, perRow);
     }
 
     public List<NVec> ArrivalPositions(Unit unit)
@@ -558,6 +569,23 @@ public partial class BattleScreen : Node
                     Btn(u.Name, () => Do(new UseReaction(d, unit.Id)));
                 }
                 Btn("Decline", () => Do(new DeclineReaction(d)));
+                break;
+
+            case PendingFollowUp pf:
+                Text($"{pf.Source.Name}: {pf.Ability.Name}. Pick a unit to fight next, then click its target.", Palette.Accent);
+                foreach (var c in pf.Candidates)
+                {
+                    var unit = c;
+                    Btn($"Fight with {unit.Name}", () => { Selected = unit; Mode = TargetMode.Fight; _panelSignature = ""; },
+                        on: Selected == unit && Mode == TargetMode.Fight);
+                }
+                Btn("No follow-up fight", () => Do(new DeclineReaction(d)));
+                break;
+
+            case PendingSetUp ps:
+                Text($"{ps.Source}: click the board to set up {ps.Unit.Name} again (more than {ps.MinEnemyDistance}\" from enemies" +
+                     (ps.WithinOfAnchor is float w && ps.Anchor != null ? $", wholly within {w}\" of {ps.Anchor.Name}" : "") + ").", Palette.Accent);
+                Btn("Leave it where it is", () => Do(new CancelMove(d)));
                 break;
 
             case PendingMarker pmk:

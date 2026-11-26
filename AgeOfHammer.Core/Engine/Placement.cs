@@ -186,6 +186,19 @@ public static class Placement
         return null;
     }
 
+    /// <summary>A legal set-up formation for a unit being redeployed by an ability, or null.</summary>
+    public static List<Vector2>? FindSetUp(GameEngine engine, PendingSetUp ps, Vector2 desired)
+    {
+        var unit = ps.Unit;
+        int perRow = unit.AliveCount >= 10 ? 10 : 5;
+        foreach (var c in Spiral(desired, 60))
+        {
+            var pos = Geo.Formation(unit.AliveCount, unit.BaseExtent, c, perRow);
+            if (engine.ValidateSetUp(ps, pos) == null) return pos;
+        }
+        return null;
+    }
+
     /// <summary>A legal marker position as close to <paramref name="desired"/> as possible, or null.</summary>
     public static Vector2? FindMarkerSpot(GameEngine engine, int owner, Data.MarkerDef def, Vector2 desired)
     {
