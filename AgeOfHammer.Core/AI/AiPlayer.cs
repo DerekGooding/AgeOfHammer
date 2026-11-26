@@ -175,6 +175,7 @@ public sealed class AiPlayer
                 for (int i = 0; i < u.Warscroll.Spells.Count; i++)
                 {
                     var spell = u.Warscroll.Spells[i];
+                    if (spell.Effect == null) continue; // unscripted: casting would only risk a miscast
                     if (e.State.Players[Player].SpellsCastThisTurn.Contains(spell.Name)) continue;
                     var target = e.SpellTargets(u, spell).FirstOrDefault();
                     if (target != null) return new CastSpell(Player, u.Id, i, target.Id);

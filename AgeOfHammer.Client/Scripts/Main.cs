@@ -17,6 +17,7 @@ public sealed class MatchSetup
 /// Root node: loads game data and swaps between screens.
 /// Command-line options (after "--"):
 ///   --watch                         start an AI vs AI battle with the default armies
+///   --army-screen                   open player 1's army editor (for screenshots)
 ///   --smoke                         play an AI vs AI game instantly, print the result and quit (exit code 0 = ok)
 ///   --screenshot &lt;file.png&gt; [--after &lt;seconds&gt;]   save the window to a PNG and quit
 /// </summary>
@@ -76,7 +77,9 @@ public partial class Main : Node
             return;
         }
 
-        if (LoadError == null && (args.Contains("--watch") || SmokeTest))
+        if (LoadError == null && args.Contains("--army-screen"))
+            ShowArmy(0);
+        else if (LoadError == null && (args.Contains("--watch") || SmokeTest))
         {
             Setup.IsAi[0] = Setup.IsAi[1] = true;
             ShowBattle();

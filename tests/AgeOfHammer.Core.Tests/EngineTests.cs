@@ -359,6 +359,31 @@ public class SimulationTests
         Assert.DoesNotContain(e.State.Log, l => l.StartsWith("(AI:"));
     }
 
+    public static IEnumerable<object[]> AllFactions() =>
+        DataLoader.LoadAllFactions(DataLoader.FindDataDirectory()).Select(f => new object[] { f.Id });
+
+    /// <summary>Every imported army must survive a full AI game (vs Stormcast Eternals) without engine errors.</summary>
+    [Theory]
+    [MemberData(nameof(AllFactions))]
+    public void EveryFactionCanPlayAFullGame(string factionId)
+    {
+        var dir = DataLoader.FindDataDirectory();
+        var factions = DataLoader.LoadAllFactions(dir);
+        var plan = DataLoader.LoadAllBattleplans(dir).First();
+        var f = factions.First(x => x.Id == factionId);
+        var opponent = factions.First(x => x.Id == "stormcast-eternals");
+        Assert.NotEmpty(f.DefaultArmy);
+        var e = GameEngine.Create(plan, f, f.DefaultArmy, opponent, opponent.DefaultArmy, new SeededDiceRoller(7));
+        var ai = new[] { new AiPlayer(0), new AiPlayer(1) };
+        int actions = 0;
+        while (e.State.Phase != Phase.GameOver)
+        {
+            Assert.True(++actions < 20000, "game did not finish");
+            ai[e.Decider].Act(e);
+        }
+        Assert.DoesNotContain(e.State.Log, l => l.StartsWith("(AI:"));
+    }
+
     [Fact]
     public void SameSeedGivesSameGame()
     {

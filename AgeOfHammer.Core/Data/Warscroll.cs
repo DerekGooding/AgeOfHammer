@@ -103,6 +103,20 @@ public sealed class AbilityDef
     /// <summary>Timing as printed, e.g. "Passive", "Your Hero Phase", "Any Combat Phase".</summary>
     public string Timing { get; set; } = "Passive";
     public string Text { get; set; } = "";
+    /// <summary>"passive", "active" or "reaction".</summary>
+    public string? Kind { get; set; }
+    /// <summary>Structured timing: hero, movement, shooting, charge, combat, end-of-turn, start-of-turn, deployment, battle-round-start...</summary>
+    public string? Phase { get; set; }
+    /// <summary>Whose turn: "your", "enemy", "any" or "neutral".</summary>
+    public string? Perspective { get; set; }
+    /// <summary>For reactions: what triggers it, as printed.</summary>
+    public string? ReactionTrigger { get; set; }
+    /// <summary>Declare step text, as printed (the Effect is in <see cref="Text"/>).</summary>
+    public string? Declare { get; set; }
+    /// <summary>Cost type: "spell" (casting value), "prayer" (chanting value) or "command-points".</summary>
+    public string? CostKind { get; set; }
+    public int? CostValue { get; set; }
+    public List<string> Keywords { get; set; } = new();
     /// <summary>Optional: hook into a hand-written C# ability script.</summary>
     public string? ScriptId { get; set; }
     /// <summary>Optional: simple passive modifiers the engine applies automatically.</summary>
@@ -140,7 +154,16 @@ public sealed class Warscroll
     public List<WeaponProfile> Weapons { get; set; } = new();
     public List<AbilityDef> Abilities { get; set; } = new();
     public List<SpellDef> Spells { get; set; } = new();
+    /// <summary>Base size as printed (may be oval, e.g. "105 x 70mm"); <see cref="BaseSizeMm"/> is the circle the engine uses.</summary>
+    public string? BaseSize { get; set; }
+    /// <summary>Regiment options from the battle profile, e.g. "Any Stormcast Eternals", "0-1 Knight-Arcanum".</summary>
+    public List<string> RegimentOptions { get; set; } = new();
+    /// <summary>Importer notes, e.g. assumptions made about weapon loadouts.</summary>
+    public List<string> Notes { get; set; } = new();
+    /// <summary>Where the data came from (URLs or publication references).</summary>
+    public List<string> Sources { get; set; } = new();
     public string Source { get; set; } = "";
+    /// <summary>True once a person has checked this warscroll against the rules source.</summary>
     public bool Verified { get; set; }
 
     [JsonIgnore] public string FactionId { get; set; } = "";
@@ -154,6 +177,15 @@ public sealed class Warscroll
     public bool HasKeyword(string keyword) => Keywords.Any(k => string.Equals(k, keyword, StringComparison.OrdinalIgnoreCase));
 }
 
+/// <summary>A named group of faction rules, e.g. a battle formation or a spell lore.</summary>
+public sealed class ContentGroupDef
+{
+    /// <summary>battle-formation, heroic-trait, artefact-of-power, spell-lore, prayer-lore, manifestation-lore, ...</summary>
+    public string Type { get; set; } = "";
+    public string Name { get; set; } = "";
+    public List<AbilityDef> Abilities { get; set; } = new();
+}
+
 public sealed class FactionData
 {
     public string Id { get; set; } = "";
@@ -164,6 +196,10 @@ public sealed class FactionData
     public string Source { get; set; } = "";
     public bool Verified { get; set; }
     public List<AbilityDef> BattleTraits { get; set; } = new();
+    /// <summary>Other faction rules: battle formations, heroic traits, artefacts, spell/prayer/manifestation lores...</summary>
+    public List<ContentGroupDef> ContentGroups { get; set; } = new();
+    /// <summary>Credit line for the data source.</summary>
+    public string Attribution { get; set; } = "";
     /// <summary>Warscroll ids used when no army is picked (e.g. for the AI).</summary>
     public List<string> DefaultArmy { get; set; } = new();
     public List<Warscroll> Warscrolls { get; set; } = new();

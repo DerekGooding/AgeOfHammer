@@ -62,7 +62,7 @@ public partial class MenuScreen : Control
                  {
                      "Left-click: select / place / target.   Right-drag: pan.   Mouse wheel: zoom.",
                      "Enter: end phase.   Esc: cancel.   Tab: next unit.   R: deployment formation.   F: fit board.   +/-: AI speed.   P: pause AI.",
-                     "Unit stats were entered without access to Wahapedia - check data/factions/*.json (\"verified\": false).",
+                     "Army data: AoS Reminders (github.com/daviseford/aos-reminders), from Games Workshop publications and Wahapedia. Imported, not hand-verified.",
                  })
         {
             var l = Ui.Label(line, Palette.TextDim, 14);
@@ -98,7 +98,8 @@ public partial class MenuScreen : Control
             Grow(Ui.Button("Human", () => { setup.IsAi[player] = false; Build(); }, on: !setup.IsAi[player])),
             Grow(Ui.Button("AI", () => { setup.IsAi[player] = true; Build(); }, on: setup.IsAi[player]))));
 
-        var armyLabel = Ui.Label($"Army: {setup.Armies[player].Count} units");
+        int points = setup.Armies[player].Sum(id => faction.Warscrolls.FirstOrDefault(w => w.Id == id)?.Points ?? 0);
+        var armyLabel = Ui.Label($"Army: {setup.Armies[player].Count} units, {points} pts");
         armyLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         col.AddChild(Ui.Row(8, armyLabel, Ui.Button("Edit army...", () => App.ShowArmy(player), minWidth: 140)));
         foreach (var group in setup.Armies[player].GroupBy(id => id))
