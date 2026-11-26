@@ -47,6 +47,10 @@ public sealed record PowerThrough(int Player, int UnitId, int TargetId) : GameAc
 public sealed record RespondDefence(int Player, bool UseAllOutDefence) : GameAction(Player);
 public sealed record UseReaction(int Player, int UnitId) : GameAction(Player);
 public sealed record DeclineReaction(int Player) : GameAction(Player);
+/// <summary>Uses a scripted ability. Targets may be empty for self abilities; extra targets are filled in by the engine.</summary>
+public sealed record UseAbility(int Player, int UnitId, string Ability, IReadOnlyList<int>? Targets = null) : GameAction(Player);
+/// <summary>Closes an ability window (the non-active player has finished using abilities this phase).</summary>
+public sealed record DoneAbilities(int Player) : GameAction(Player);
 /// <summary>Ends the current phase. In the combat phase this passes (your remaining units do not fight).</summary>
 public sealed record EndPhase(int Player) : GameAction(Player);
 
@@ -79,6 +83,12 @@ public sealed class PendingDefence : PendingDecision
     public required Unit Attacker { get; init; }
     public required Unit Target { get; init; }
     public required Action<bool> Resume { get; init; }
+}
+
+/// <summary>At the end of a phase the non-active player may use their abilities for that phase.</summary>
+public sealed class PendingAbilityWindow : PendingDecision
+{
+    public Phase Phase { get; init; }
 }
 
 /// <summary>The non-active player may use a reaction command at the end of a phase.</summary>

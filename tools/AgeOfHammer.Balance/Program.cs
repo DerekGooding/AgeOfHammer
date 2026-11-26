@@ -19,7 +19,7 @@ using AgeOfHammer.Core.State;
 int seeds = 200;
 string? dataDir = null, planId = null, army1 = null, army2 = null;
 string p1 = "stormcast-eternals", p2 = "skaven";
-bool swap = true, details = false;
+bool swap = true, details = false, coverage = false;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -36,6 +36,7 @@ for (int i = 0; i < args.Length; i++)
         case "--army2": army2 = Next(); break;
         case "--no-swap": swap = false; break;
         case "--details": details = true; break;
+        case "--coverage": coverage = true; break;
         default:
             Console.Error.WriteLine($"Unknown argument '{arg}'.");
             return 2;
@@ -56,6 +57,23 @@ catch (Exception ex) when (ex is IOException or InvalidDataException or Argument
 {
     Console.Error.WriteLine(ex.Message);
     return 1;
+}
+
+if (coverage)
+{
+    // How much of each army's rules the engine automates (data/scripts).
+    Console.WriteLine($"{"Faction",-24} {"warscroll abilities",20} {"spells",10} {"battle traits",14}");
+    foreach (var f in factions)
+    {
+        var abilities = f.Warscrolls.SelectMany(w => w.Abilities).ToList();
+        var spells = f.Warscrolls.SelectMany(w => w.Spells).ToList();
+        Console.WriteLine($"{f.Name,-24} {Frac(abilities.Count(a => a.IsScripted), abilities.Count),20} " +
+                          $"{Frac(spells.Count(sp => sp.IsScripted), spells.Count),10} {Frac(f.BattleTraits.Count(a => a.IsScripted), f.BattleTraits.Count),14}");
+        foreach (var w in f.LoadWarnings) Console.WriteLine($"  warning: {w}");
+    }
+    return 0;
+
+    static string Frac(int n, int total) => total == 0 ? "-" : $"{n}/{total} ({100.0 * n / total:0}%)";
 }
 
 FactionData Faction(string id) => factions.FirstOrDefault(f => f.Id == id)

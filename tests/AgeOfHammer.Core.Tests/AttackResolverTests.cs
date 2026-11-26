@@ -191,7 +191,7 @@ public class AttackResolverTests
         a.Warscroll.Abilities.Add(new AbilityDef
         {
             Name = "Lay Low",
-            Modifiers = [new PassiveModifierDef { Stat = "Wound", Value = 1, AttackType = "Melee", Condition = "targetHealth5Plus" }],
+            Modifiers = [new PassiveModifierDef { Stat = "Wound", Value = 1, AttackType = "Melee", Condition = "targetHealth>=5" }],
         });
         Assert.Equal(0, AttackResolver.WoundModifier(s, a, t, Melee()));
         t.Warscroll.Health = 6;

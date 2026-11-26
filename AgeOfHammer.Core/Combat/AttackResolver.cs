@@ -52,60 +52,40 @@ public sealed class AttackResult
     }
 }
 
-/// <summary>Collects every modifier that applies to a stat for a unit (buffs + data-driven passive abilities).</summary>
-public static class Modifiers
-{
-    public static int Get(GameState state, Unit unit, Stat stat, AttackType type, Unit? opponent = null)
-    {
-        int total = unit.BuffTotal(stat, type);
-        foreach (var ability in AbilitiesOf(state, unit))
-            foreach (var m in ability.Modifiers)
-            {
-                if (!Enum.TryParse<Stat>(m.Stat, true, out var s) || s != stat) continue;
-                var at = Enum.TryParse<AttackType>(m.AttackType, true, out var parsed) ? parsed : AttackType.Any;
-                if (at != AttackType.Any && type != AttackType.Any && at != type) continue;
-                if (!ConditionHolds(m.Condition, unit, opponent)) continue;
-                total += m.Value;
-            }
-        return total;
-    }
-
-    public static bool HasFlag(GameState state, Unit unit, Stat stat) =>
-        unit.HasBuff(stat) || Get(state, unit, stat, AttackType.Any) > 0;
-
-    public static IEnumerable<AbilityDef> AbilitiesOf(GameState state, Unit unit)
-    {
-        foreach (var a in unit.Warscroll.Abilities) yield return a;
-        if (state.Players.Length > unit.Owner)
-            foreach (var a in state.Players[unit.Owner].Faction.BattleTraits) yield return a;
-    }
-
-    private static bool ConditionHolds(string? condition, Unit unit, Unit? opponent)
-    {
-        if (string.IsNullOrWhiteSpace(condition)) return true;
-        var c = condition.Trim();
-        if (c.Equals("charged", StringComparison.OrdinalIgnoreCase)) return unit.Charged;
-        if (c.Equals("targetHealth5Plus", StringComparison.OrdinalIgnoreCase)) return opponent != null && opponent.Warscroll.Health >= 5;
-        if (c.StartsWith("targetKeyword:", StringComparison.OrdinalIgnoreCase))
-            return opponent != null && opponent.Warscroll.HasKeyword(c["targetKeyword:".Length..]);
-        return false; // unknown conditions never apply
-    }
-}
-
 /// <summary>Weapons in an activation: each weapon with the number of models attacking with it.</summary>
 public readonly record struct WeaponUse(WeaponProfile Weapon, int Models);
 
 public static class AttackResolver
 {
-    public static int HitModifier(GameState s, Unit attacker, Unit target, WeaponProfile w, AttackOptions o) =>
-        w.Companion ? 0 : Math.Clamp(Modifiers.Get(s, attacker, Stat.Hit, w.Type, target) + o.ExtraHit, -1, 1);
+    /// <summary>Hit modifier: the attacker's own modifiers (not for Companion weapons) plus modifiers on the target
+    /// against attacks that target it, capped at +/-1 in total.</summary>
+    public static int HitModifier(GameState s, Unit attacker, Unit target, WeaponProfile w, AttackOptions o)
+    {
+        int own = w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Hit, w.Type, target, w) + o.ExtraHit;
+        return Math.Clamp(own + Modifiers.Get(s, target, Stat.HitAgainst, w.Type, attacker, w), -1, 1);
+    }
 
-    public static int WoundModifier(GameState s, Unit attacker, Unit target, WeaponProfile w) =>
-        w.Companion ? 0 : Math.Clamp(Modifiers.Get(s, attacker, Stat.Wound, w.Type, target), -1, 1);
+    public static int WoundModifier(GameState s, Unit attacker, Unit target, WeaponProfile w)
+    {
+        int own = w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Wound, w.Type, target, w);
+        return Math.Clamp(own + Modifiers.Get(s, target, Stat.WoundAgainst, w.Type, attacker, w), -1, 1);
+    }
+
+    public static int AttacksBonus(GameState s, Unit attacker, Unit target, WeaponProfile w) =>
+        w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Attacks, w.Type, target, w);
+
+    public static int DamageBonus(GameState s, Unit attacker, Unit target, WeaponProfile w) =>
+        (w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Damage, w.Type, target, w)) + (w.ChargeBonusDamage && attacker.Charged ? 1 : 0);
+
+    public static int DamageMultiplier(GameState s, Unit attacker, Unit target, WeaponProfile w) =>
+        w.Companion ? 1 : Modifiers.Multiplier(s, attacker, Stat.Damage, w.Type, target, w);
+
+    private static int RollDamage(IDiceRoller dice, WeaponProfile w, int bonus, int multiplier) =>
+        Math.Max(0, (w.DamageExpr.Roll(dice) + bonus) * multiplier);
 
     public static int EffectiveRend(GameState s, Unit attacker, Unit target, WeaponProfile w)
     {
-        int rend = w.Rend + (w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Rend, w.Type, target));
+        int rend = w.Rend + (w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Rend, w.Type, target, w));
         foreach (var (kw, bonus) in w.AntiAbilities)
         {
             bool applies = kw.Equals("Charge", StringComparison.OrdinalIgnoreCase) ? target.Charged : target.Warscroll.HasKeyword(kw);
@@ -118,11 +98,11 @@ public static class AttackResolver
     public static int SaveModifier(GameState s, Unit target, Unit attacker, AttackType type, AttackOptions o) =>
         Math.Min(1, Modifiers.Get(s, target, Stat.Save, type, attacker) + o.ExtraSave);
 
+    /// <summary>The best ward the target has: its own, or from a buff or aura (e.g. "WARD (6+) while wholly within 13"").</summary>
     public static int? EffectiveWard(GameState s, Unit target)
     {
         int? ward = target.Warscroll.Ward;
-        foreach (var b in target.Buffs.Where(b => b.Stat == Stat.Ward))
-            ward = ward is null ? b.Value : Math.Min(ward.Value, b.Value);
+        if (Modifiers.Lowest(s, target, Stat.Ward) is int other) ward = ward is null ? other : Math.Min(ward.Value, other);
         return ward is > 0 and < 7 ? ward : null;
     }
 
@@ -145,18 +125,19 @@ public static class AttackResolver
             int woundMod = WoundModifier(s, attacker, target, w);
             int rend = EffectiveRend(s, attacker, target, w);
             int saveMod = SaveModifier(s, target, attacker, w.Type, options);
-            int extraAttacks = w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Attacks, w.Type, target);
-            int extraDamage = (w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Damage, w.Type, target))
-                              + (w.ChargeBonusDamage && attacker.Charged ? 1 : 0);
+            int extraAttacks = AttacksBonus(s, attacker, target, w);
+            int extraDamage = DamageBonus(s, attacker, target, w);
+            int damageMultiplier = DamageMultiplier(s, attacker, target, w);
 
             for (int m = 0; m < models; m++)
                 line.Attacks += Math.Max(0, w.AttacksExpr.Roll(dice) + extraAttacks);
 
             int normalHits = 0, autoWounds = 0;
+            int failFloor = Modifiers.Get(s, target, Stat.UnmodifiedHitFailsAgainst, w.Type, attacker, w);
             for (int a = 0; a < line.Attacks; a++)
             {
                 int roll = dice.D6();
-                if (!HitSucceeds(roll, w.Hit, hitMod)) continue;
+                if (roll <= failFloor || !HitSucceeds(roll, w.Hit, hitMod)) continue;
                 bool crit = roll == 6;
                 line.Hits++;
                 if (crit)
@@ -167,8 +148,7 @@ public static class AttackResolver
                         case CritEffect.TwoHits: line.Hits++; normalHits += 2; continue;
                         case CritEffect.AutoWound: autoWounds++; continue;
                         case CritEffect.Mortal:
-                            int md = Math.Max(0, w.DamageExpr.Roll(dice) + extraDamage);
-                            line.MortalDamage += md;
+                            line.MortalDamage += RollDamage(dice, w, extraDamage, damageMultiplier);
                             continue;
                     }
                 }
@@ -183,7 +163,7 @@ public static class AttackResolver
             {
                 if (SaveSucceeds(dice.D6(), target.Warscroll.Save, saveMod, rend)) continue;
                 line.FailedSaves++;
-                line.Damage += Math.Max(0, w.DamageExpr.Roll(dice) + extraDamage);
+                line.Damage += RollDamage(dice, w, extraDamage, damageMultiplier);
             }
 
             pool += line.Damage + line.MortalDamage;
@@ -204,8 +184,11 @@ public static class AttackResolver
         int warded = 0;
         var ward = EffectiveWard(s, target);
         if (ward is int wv)
+        {
+            int mod = Modifiers.Get(s, target, Stat.WardRoll, AttackType.Any);
             for (int i = 0; i < damage; i++)
-                if (s.Dice.D6() >= wv) warded++;
+                if (s.Dice.D6() + mod >= wv) warded++;
+        }
         int remaining = damage - warded;
         int inflicted = 0, slain = 0;
         int health = target.Warscroll.Health;
@@ -251,11 +234,11 @@ public static class AttackResolver
         int woundMod = WoundModifier(s, attacker, target, w);
         int rend = EffectiveRend(s, attacker, target, w);
         int saveMod = SaveModifier(s, target, attacker, w.Type, options);
-        double attacks = models * Math.Max(0, w.AttacksExpr.Average + (w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Attacks, w.Type, target)));
-        double dmg = Math.Max(0, w.DamageExpr.Average + (w.Companion ? 0 : Modifiers.Get(s, attacker, Stat.Damage, w.Type, target))
-                                 + (w.ChargeBonusDamage && attacker.Charged ? 1 : 0));
-        double pCrit = 1 / 6.0;
-        double pNormalHit = P(r => r != 6 && HitSucceeds(r, w.Hit, hitMod));
+        double attacks = models * Math.Max(0, w.AttacksExpr.Average + AttacksBonus(s, attacker, target, w));
+        double dmg = Math.Max(0, (w.DamageExpr.Average + DamageBonus(s, attacker, target, w)) * DamageMultiplier(s, attacker, target, w));
+        int failFloor = Modifiers.Get(s, target, Stat.UnmodifiedHitFailsAgainst, w.Type, attacker, w);
+        double pCrit = failFloor >= 6 ? 0 : 1 / 6.0;
+        double pNormalHit = P(r => r != 6 && r > failFloor && HitSucceeds(r, w.Hit, hitMod));
         double pWound = P(r => WoundSucceeds(r, w.Wound, woundMod));
         double pUnsaved = 1 - P(r => SaveSucceeds(r, target.Warscroll.Save, saveMod, rend));
         double perAttack = w.Crit switch
@@ -266,7 +249,8 @@ public static class AttackResolver
             _ => (pNormalHit + pCrit) * pWound * pUnsaved * dmg,
         };
         var ward = EffectiveWard(s, target);
-        double wardFactor = ward is int wv ? 1 - (7 - wv) / 6.0 : 1;
+        int wardMod = Modifiers.Get(s, target, Stat.WardRoll, AttackType.Any);
+        double wardFactor = ward is int wv ? 1 - P(r => r + wardMod >= wv) : 1;
         return attacks * perAttack * wardFactor;
     }
 }

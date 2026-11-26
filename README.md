@@ -140,4 +140,14 @@ dotnet run --project tools/AgeOfHammer.Import -- --refresh # download the latest
 - **Overrides.** Fix any of the above in `data/overrides/<faction>.json`. Those fixes survive re-imports; see [data/overrides/README.md](data/overrides/README.md).
 - **`verified` flag.** It stays `false` until a person has checked the warscroll.
 
-Simple passive abilities can be expressed in data, for example `"modifiers": [{ "stat": "Wound", "value": 1, "attackType": "Melee", "condition": "targetHealth5Plus" }]`. Spells can use the `effect` types `mortal`, `heal` and `buff`. Abilities that need real logic still need code; `AbilityDef.ScriptId` is reserved for that.
+### Ability scripts
+
+**Automation.** Abilities are automated by data-driven scripts in `data/scripts/<faction>.json`, which are applied when the factions load. A script can do three kinds of thing:
+- **Passive modifiers**, with conditions, weapon filters and auras.
+- **Activated abilities**, made of a target, a dice gate and effects, with once-per-turn and once-per-battle limits. The AI uses them too, and the opponent gets an ability window at the end of each phase.
+- **Automatic triggers**, such as end-of-turn heals.
+
+**Current coverage.**
+- About 45% of Stormcast Eternals and Skaven warscroll abilities are scripted, plus the core spells.
+- `dotnet run --project tools/AgeOfHammer.Balance -- --coverage` shows the coverage for every faction.
+- The script vocabulary is documented in [data/scripts/README.md](data/scripts/README.md).

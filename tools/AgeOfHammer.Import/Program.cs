@@ -85,7 +85,7 @@ foreach (var factionEntity in catalog.OfKind("faction").OrderBy(f => f.GetProper
     string overridePath = Path.Combine(overridesDir, id + ".json");
     if (File.Exists(overridePath))
     {
-        try { Overrides.Apply(node, JsonNode.Parse(File.ReadAllText(overridePath), documentOptions: new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true })!.AsObject()); }
+        try { foreach (var u in DataPatch.Apply(node, DataPatch.ParseObject(File.ReadAllText(overridePath)))) Console.Error.WriteLine($"  {name}: override matched no {u}"); }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             Console.Error.WriteLine($"  {name}: override file {overridePath} is invalid: {ex.Message}");

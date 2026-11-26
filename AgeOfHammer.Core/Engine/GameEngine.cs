@@ -92,6 +92,11 @@ public sealed partial class GameEngine
                     Pending = null;
                     AdvancePhase();
                     return ActionResult.Success;
+                case (PendingAbilityWindow, UseAbility ua): return DoUseAbility(ua);
+                case (PendingAbilityWindow, DoneAbilities):
+                    Pending = null;
+                    EndPhaseFlow();
+                    return ActionResult.Success;
                 default:
                     return ActionResult.Fail($"Waiting for a different decision ({Pending.GetType().Name}).");
             }
@@ -107,6 +112,7 @@ public sealed partial class GameEngine
             Rally r => DoRally(r),
             CastSpell cs => DoCastSpell(cs),
             PowerThrough pt => DoPowerThrough(pt),
+            UseAbility ua => DoUseAbility(ua),
             EndPhase e => DoEndPhase(e),
             _ => ActionResult.Fail($"{action.GetType().Name} is not valid right now."),
         };
@@ -200,6 +206,7 @@ public sealed partial class GameEngine
             u.Buffs.RemoveAll(b => b.Expiry == Expiry.EndOfTurn);
         }
         foreach (var p in State.Players) p.SpellsCastThisTurn.Clear();
+        RemoveExpiredUntilNextTurn(player);
         State.Write($"--- {State.Players[player].Name}'s turn (round {State.BattleRound}) ---");
         EnterPhase(Phase.Hero);
     }
@@ -208,6 +215,7 @@ public sealed partial class GameEngine
     {
         State.Phase = phase;
         _reactionOffered = false;
+        _abilityWindowOffered = false;
         foreach (var u in State.Units)
         {
             u.Shot = u.Fought = u.ReceivedCommandThisPhase = false;
@@ -217,6 +225,7 @@ public sealed partial class GameEngine
         foreach (var p in State.Players) p.CommandsUsedThisPhase.Clear();
         if (phase == Phase.Combat) _combatPicker = State.ActivePlayer;
         State.Write($"{phase} phase.");
+        ResolveAutoAbilities();
     }
 
     private void AdvancePhase()
@@ -250,13 +259,24 @@ public sealed partial class GameEngine
             case Phase.Combat:
                 PassCombat(e.Player);
                 return ActionResult.Success;
+        }
+        EndPhaseFlow();
+        return ActionResult.Success;
+    }
+
+    /// <summary>End of a phase: the opponent's ability window, then reaction commands, then the next phase.</summary>
+    private void EndPhaseFlow()
+    {
+        if ((State.Phase is Phase.Hero or Phase.Movement or Phase.Shooting or Phase.Charge or Phase.EndOfTurn) && TryOfferAbilityWindow())
+            return;
+        switch (State.Phase)
+        {
             case Phase.Movement when TryOfferReaction(ReactionKind.Redeploy):
             case Phase.Shooting when TryOfferReaction(ReactionKind.CoveringFire):
             case Phase.Charge when TryOfferReaction(ReactionKind.CounterCharge):
-                return ActionResult.Success;
+                return;
         }
         AdvancePhase();
-        return ActionResult.Success;
     }
 
     // ------------------------------------------------------------------ Scoring and game end
@@ -318,7 +338,7 @@ public sealed partial class GameEngine
         var p = State.Players[player];
         return p.CommandPoints >= Commands.Cost(command)
                && !p.CommandsUsedThisPhase.Contains(command)
-               && (unit == null || !unit.ReceivedCommandThisPhase);
+               && (unit == null || (!unit.ReceivedCommandThisPhase && !Modifiers.HasFlag(State, unit, Stat.NoCommands)));
     }
 
     private void PayCommand(int player, string command, Unit? unit)

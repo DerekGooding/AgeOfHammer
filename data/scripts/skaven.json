@@ -1,0 +1,124 @@
+{
+  // Skaven ability scripts. Applied on load to data/factions/skaven.json (see data/scripts/README.md).
+  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): tunnels/Gnawholes/reserves,
+  // tokens (Bomb Rats), Hidden Weapon Team visibility, re-rolls, results tables (Peal of Doom, Too Horrible to Die),
+  // extra FIGHT activations, move-and-strike abilities (Rolling Doom, Smoke Bombs).
+  "abilities": {
+    // ----- Battle traits
+    "Too Quick To Hit-Hit": { "modifiers": [ { "stat": "NoRetreatDamage", "value": 1, "condition": "keywordAny:INFANTRY|CAVALRY" } ] },
+
+    // ----- Passive modifiers
+    "Gas Clouds": { "modifiers": [ { "stat": "Damage", "value": 1, "weapon": "Poisoned Wind", "condition": "targetModels>=10" } ] },
+    "Cornered Rat": { "modifiers": [ { "stat": "Attacks", "value": 3, "weapon": "Warpforged", "condition": "damaged" } ] },
+    "Running Death": { "modifiers": [
+      { "stat": "ShootAfterRun", "value": 1, "aura": { "side": "friendly", "range": 13, "wholly": true, "keywords": ["ESHIN"] } },
+      { "stat": "ChargeAfterRun", "value": 1, "aura": { "side": "friendly", "range": 13, "wholly": true, "keywords": ["ESHIN"] } } ] },
+    "Shadowy Killers": { "modifiers": [ { "stat": "UnmodifiedHitFailsAgainst", "value": 4 } ] },
+    "Master Of Assassins": { "modifiers": [ { "stat": "Damage", "multiply": 2, "attackType": "Melee", "condition": "targetKeyword:HERO" } ] },
+    "Altar Of The Horned Rat": { "modifiers": [ { "stat": "Ward", "value": 6,
+      "aura": { "side": "friendly", "range": 13, "wholly": true, "keywords": ["SKAVEN", "INFANTRY"] } } ] },
+    "Foster Competition": { "modifiers": [ { "stat": "Wound", "value": 1,
+      "aura": { "side": "friendly", "range": 13, "wholly": true, "names": ["Stormvermin"] } } ] },
+    "Altar Of The Great Corruptor": { "modifiers": [ { "stat": "Ward", "value": 6,
+      "aura": { "side": "friendly", "range": 13, "wholly": true, "keywords": ["PESTILENS"] } } ] },
+    "Corrupting Influence": { "modifiers": [ { "stat": "WardRoll", "value": -1, "aura": { "side": "enemy", "range": 13 } } ] },
+    "Enshrouding Fumes": { "modifiers": [ { "stat": "HitAgainst", "value": -1, "attackType": "Ranged" } ] },
+    "Overwhelming Fire": { "modifiers": [ { "stat": "Hit", "value": 1, "attackType": "Ranged", "condition": "targetModels>=10" } ] },
+    "Explosive Payload": { "modifiers": [ { "stat": "Hit", "value": 1, "attackType": "Ranged", "condition": "targetModels>=10" } ] },
+    "Elite Bodyguard": { "modifiers": [ { "stat": "Ward", "value": 5,
+      "aura": { "side": "friendly", "range": 3, "keywords": ["SKAVEN", "INFANTRY", "HERO"], "includeSelf": false } } ] },
+    "Staff Of The Horned Rat": { "modifiers": [ { "stat": "Cast", "value": 1 } ] },
+
+    // ----- Activated abilities
+    // APPROX: applies -1 to hit to the enemy units within 6" when used (not to ones that move in later).
+    "Warpstone Fumes": {
+      "activate": { "target": "enemy", "range": 6, "maxTargets": 0, "roll": "D6", "success": 2,
+        "effects": [ { "type": "buff", "stat": "Hit", "value": -1 } ] }
+    },
+    "Regenerating Terror": { "activate": { "target": "self", "auto": true, "effects": [ { "type": "heal", "amount": "D6" } ] } },
+    "Regenerating Monstrosity": { "activate": { "target": "self", "auto": true, "effects": [ { "type": "heal", "amount": "D6" } ] } },
+    "Warp-Amulet": { "activate": { "target": "self", "auto": true, "effects": [ { "type": "heal", "amount": "D3" } ] } },
+    "Seething Swarm": { "activate": { "target": "self", "auto": true, "effects": [ { "type": "returnModels", "amount": "D3" } ] } },
+    "Cruel Commander": {
+      "activate": { "target": "friendly", "range": 13, "wholly": true, "targetKeywords": ["VERMINUS", "INFANTRY"], "targetExcludeKeywords": ["HERO"],
+        "effects": [
+          { "type": "mortal", "amount": "1" },
+          { "type": "buff", "stat": "Control", "value": 5, "expiry": "UntilYourNextTurn" } ] }
+    },
+    "Diversionary Assault": {
+      "activate": { "target": "friendly", "range": 13, "wholly": true, "targetNames": ["Gutter Runners"],
+        "effects": [ { "type": "buff", "stat": "Charge", "value": 2 } ] }
+    },
+    "Whirling Doom": {
+      "activate": { "target": "enemy", "range": 1, "requires": "chargedThisPhase", "roll": "D3", "success": 2,
+        "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
+    "Avalanche Of Flesh": {
+      "activate": { "target": "enemy", "inCombat": true, "targetKeywords": ["INFANTRY"], "roll": "D6", "success": 3,
+        "effects": [ { "type": "mortalPerModel", "threshold": 5 } ] }
+    },
+    "Doomfang": {
+      "activate": { "target": "self", "requires": "inCombat", "effects": [
+        { "type": "buff", "stat": "StrikeFirst", "value": 1 },
+        { "type": "buff", "stat": "NoCommands", "value": 1, "expiry": "EndOfPhase" } ] }
+    },
+    // APPROX: control penalty uses 4 (the average of a 3+ roll) instead of the roll itself.
+    "Terrifying Monstrosity": {
+      "activate": { "target": "enemy", "inCombat": true, "targetKeywords": ["INFANTRY"], "roll": "D6", "success": 3,
+        "effects": [
+          { "type": "buff", "stat": "NoCommands", "value": 1 },
+          { "type": "buff", "stat": "Control", "value": -4, "expiry": "UntilYourNextTurn" } ] }
+    },
+    "Lord Of Flesh-Grafting": {
+      "activate": { "target": "friendly", "range": 13, "wholly": true, "other": true, "targetKeywords": ["MOULDER"], "auto": true,
+        "effects": [ { "type": "heal", "amount": "3" } ] }
+    },
+    "Tyrannical Packmaster": {
+      "activate": { "target": "friendly", "range": 3, "other": true, "targetKeywords": ["MOULDER"],
+        "effects": [ { "type": "buff", "stat": "Charge", "value": 1 } ] }
+    },
+    "Unleashed Warp-Fury": {
+      "activate": { "target": "self", "requires": "inCombat", "effects": [
+        { "type": "mortal", "amount": "D3", "to": "self" },
+        { "type": "buff", "stat": "Attacks", "value": 1, "attackType": "Melee", "to": "self" } ] }
+    },
+    // APPROX: a 6 inflicts D3 like a 3-5 (not 2D3).
+    "Boneripper Rampage": {
+      "activate": { "target": "enemy", "inCombat": true, "roll": "D6", "success": 3, "effects": [ { "type": "mortal", "amount": "D3" } ] }
+    },
+    // The ritual point is not modelled (no prayers yet).
+    "Plaguemaster": {
+      "activate": { "target": "enemy", "inCombat": true, "maxTargets": 3, "roll": "D3", "success": 2, "perTarget": true,
+        "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
+    "Arch-Manipulator": {
+      "activate": { "target": "enemy", "inCombat": true, "roll": "D6", "success": 4, "effects": [ { "type": "buff", "stat": "StrikeLast", "value": 1 } ] }
+    },
+    "Hurl Scry-Orb": {
+      "activate": { "target": "enemy", "inCombat": true, "roll": "D6", "success": 2, "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
+    "Fissures In Reality": {
+      "activate": { "target": "enemy", "inCombat": true, "maxTargets": 0, "roll": "D3", "success": 2, "perTarget": true,
+        "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
+    // APPROX: the -1 to hit/wound applies to all of the target's melee attacks, not only those against this unit.
+    "Gaze Of The Gnaw": {
+      "activate": { "target": "enemy", "inCombat": true, "roll": "D6", "success": 2, "effects": [
+        { "type": "buff", "stat": "Hit", "value": -1, "attackType": "Melee" },
+        { "type": "buff", "stat": "Wound", "value": -1, "attackType": "Melee" } ] }
+    }
+  },
+
+  "warscrolls": {
+    "grey-seer-on-screaming-bell": { "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -2, "weapon": "Crushing Bulk", "condition": "damagePoints>=10" } ] } } },
+    "hell-pit-abomination": { "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -5, "weapon": "Gnashing Teeth", "condition": "damagePoints>=10" } ] } } },
+    "plague-priest-on-plague-furnace": { "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -2, "weapon": "Great Plague Censer", "condition": "damagePoints>=10" } ] } } },
+    "thanquol-on-boneripper": {
+      "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -2, "weapon": "Warpfire Braziers", "condition": "damagePoints>=10" } ] } },
+      "spells": { "Terrible Madness": { "effect": { "type": "buff", "stat": "NoCommands", "value": 1, "expiry": "UntilYourNextTurn" },
+        "effects": [ { "type": "mortalPerModel", "threshold": 6 } ] } }
+    },
+    "lord-skreech-verminking": { "spells": { "The Dreaded Thirteenth Spell": { "effect": { "type": "mortalDice", "amount": "13", "threshold": 5 } } } },
+    "verminlord-warpseer": { "spells": { "Tectonic Splintering": { "effect": { "type": "buff", "stat": "ChargeDice", "value": -1, "expiry": "UntilYourNextTurn" } } } }
+  }
+}

@@ -58,7 +58,7 @@ public static class Geo
     public static bool SegmentIntersectsRect(Vector2 a, Vector2 b, RectF rect) => SweptCircleHitsRect(a, b, 0.001f, rect);
 
     /// <summary>A unit is coherent if every model is within 1/2" of another and they form a single group.</summary>
-    public static bool IsCoherent(IReadOnlyList<Vector2> positions, float radius)
+    public static bool IsCoherent(IReadOnlyList<Vector2> positions, float radius, float range = CoherencyRange)
     {
         int n = positions.Count;
         if (n <= 1) return true;
@@ -73,7 +73,7 @@ public static class Geo
             for (int j = 0; j < n; j++)
             {
                 if (seen[j]) continue;
-                if (Gap(positions[i], radius, positions[j], radius) <= CoherencyRange + Epsilon)
+                if (Gap(positions[i], radius, positions[j], radius) <= range + Epsilon)
                 {
                     seen[j] = true;
                     count++;

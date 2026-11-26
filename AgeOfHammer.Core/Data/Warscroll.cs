@@ -74,27 +74,112 @@ public sealed class WeaponProfile
     private static string Normalize(string s) => s.Replace(" ", "").ToLowerInvariant();
 }
 
-/// <summary>Data-driven effect used by spells, prayers and simple abilities.</summary>
+/// <summary>
+/// One effect of a spell or activated ability (see data/scripts/README.md):
+/// <list type="bullet">
+/// <item>"mortal": <see cref="Amount"/> mortal damage ("D3", "2", or "roll" = the gate roll's result).</item>
+/// <item>"mortalPerModel": roll a dice per model in the recipient; each roll of <see cref="Threshold"/>+ inflicts 1 mortal damage.</item>
+/// <item>"slayRoll": roll <see cref="Amount"/> dice; each roll that equals or exceeds the recipient's Health (or <see cref="Threshold"/>) slays a model.</item>
+/// <item>"mortalDice": roll <see cref="Amount"/> dice; each roll of <see cref="Threshold"/>+ inflicts 1 mortal damage.</item>
+/// <item>"heal": heal <see cref="Amount"/>. "returnModels": return <see cref="Amount"/> slain models.</item>
+/// <item>"buff": add <see cref="Value"/> to <see cref="Stat"/> until <see cref="Expiry"/>.</item>
+/// </list>
+/// </summary>
 public sealed class EffectDef
 {
-    /// <summary>"mortal" (Amount mortal damage), "heal" (Amount healed), or "buff" (Stat/Value until Expiry).</summary>
     public string Type { get; set; } = "mortal";
     public string Amount { get; set; } = "D3";
+    public int Threshold { get; set; }
+    /// <summary>For "slayRoll": a roll must equal or exceed the recipient's Health plus this (1 = "exceeds").</summary>
+    public int HealthOffset { get; set; }
     public string? Stat { get; set; }
     public int Value { get; set; }
     public string AttackType { get; set; } = "Any";
+    /// <summary>Only affect attacks with weapons whose name contains this text.</summary>
+    public string? Weapon { get; set; }
+    /// <summary>EndOfPhase, EndOfTurn, EndOfRound, UntilYourNextTurn or Permanent.</summary>
     public string Expiry { get; set; } = "EndOfTurn";
+    /// <summary>"target" (default) or "self" (the unit using the ability).</summary>
+    public string To { get; set; } = "target";
 }
 
-/// <summary>A passive modifier an ability grants to its own unit.</summary>
+/// <summary>Who an aura affects, measured from the unit that has the ability.</summary>
+public sealed class AuraDef
+{
+    /// <summary>"friendly" or "enemy".</summary>
+    public string Side { get; set; } = "friendly";
+    /// <summary>Range in inches; null = the whole battlefield.</summary>
+    public float? Range { get; set; }
+    /// <summary>Every model must be within range (wholly within) rather than any model.</summary>
+    public bool Wholly { get; set; }
+    /// <summary>Affected units must have all of these keywords.</summary>
+    public List<string> Keywords { get; set; } = new();
+    /// <summary>Affected units must have at least one of these keywords (if any are listed).</summary>
+    public List<string> KeywordsAny { get; set; } = new();
+    /// <summary>Affected units must be one of these warscrolls (by name), if any are listed.</summary>
+    public List<string> Names { get; set; } = new();
+    /// <summary>Whether the unit with the aura is affected too (friendly auras).</summary>
+    public bool IncludeSelf { get; set; } = true;
+}
+
+/// <summary>
+/// A passive modifier from an ability. Without an <see cref="Aura"/> it affects the ability's own unit; with one it
+/// affects every unit inside the aura.
+/// </summary>
 public sealed class PassiveModifierDef
 {
-    /// <summary>Hit, Wound, Rend, Attacks, Damage, Save, Ward, Move, Control, Charge, StrikeFirst, StrikeLast.</summary>
+    /// <summary>
+    /// Hit, Wound, Rend, Attacks, Damage, Save, Ward, Move, Control, Charge, ChargeDice, Cast, StrikeFirst, StrikeLast,
+    /// HitAgainst (attacks that target this unit), WoundAgainst, MaxControl, NoRetreatDamage, CoherencyRange.
+    /// </summary>
     public string Stat { get; set; } = "Hit";
     public int Value { get; set; }
+    /// <summary>Multiply the stat instead of adding (e.g. 2 = double Damage). Applied after additions.</summary>
+    public int? Multiply { get; set; }
     public string AttackType { get; set; } = "Any";
-    /// <summary>Optional condition: "charged" (this unit charged this turn), "targetHealth5Plus", "targetKeyword:X".</summary>
+    /// <summary>Only affect attacks with weapons whose name contains this text.</summary>
+    public string? Weapon { get; set; }
+    /// <summary>Condition terms joined with '&amp;'; see Modifiers.ConditionHolds for the vocabulary.</summary>
     public string? Condition { get; set; }
+    public AuraDef? Aura { get; set; }
+}
+
+/// <summary>
+/// Makes an ability usable by the engine and the AI: who it targets, an optional dice gate, and its effects.
+/// Timing comes from the ability's Phase/Perspective; frequency from its printed Timing ("Once Per Turn (Army)"...).
+/// </summary>
+public sealed class ActivationDef
+{
+    /// <summary>"self", "enemy" or "friendly".</summary>
+    public string Target { get; set; } = "self";
+    /// <summary>Targets must be within this many inches of the user (null = no range limit unless InCombat).</summary>
+    public float? Range { get; set; }
+    /// <summary>Targets must be in combat with the user.</summary>
+    public bool InCombat { get; set; }
+    public bool Wholly { get; set; }
+    public List<string> TargetKeywords { get; set; } = new();
+    public List<string> TargetKeywordsAny { get; set; } = new();
+    public List<string> TargetExcludeKeywords { get; set; } = new();
+    /// <summary>Targets must be one of these warscrolls (by name), if any are listed.</summary>
+    public List<string> TargetNames { get; set; } = new();
+    /// <summary>Exclude the user itself from friendly targets ("another friendly unit").</summary>
+    public bool Other { get; set; }
+    /// <summary>Pick up to this many targets (the engine adds the extra targets itself). 0 = every eligible unit.</summary>
+    public int MaxTargets { get; set; } = 1;
+    /// <summary>Conditions on the user (same vocabulary as modifiers), e.g. "chargedThisPhase", "inCombat".</summary>
+    public string? Requires { get; set; }
+    /// <summary>Conditions on each target, e.g. "targetCharged", "targetDamaged".</summary>
+    public string? TargetRequires { get; set; }
+    /// <summary>Optional gate: roll this dice ("D6", "D3", "2D6") and continue only on <see cref="Success"/>+.</summary>
+    public string? Roll { get; set; }
+    public int Success { get; set; }
+    /// <summary>"1" (default) or "models": roll one gate dice per model in the user's unit; the best roll counts.</summary>
+    public string RollCount { get; set; } = "1";
+    /// <summary>Roll the gate separately for each target.</summary>
+    public bool PerTarget { get; set; }
+    public List<EffectDef> Effects { get; set; } = new();
+    /// <summary>No decision needed: the engine uses it automatically whenever it can (e.g. end-of-turn heals).</summary>
+    public bool Auto { get; set; }
 }
 
 public sealed class AbilityDef
@@ -121,6 +206,19 @@ public sealed class AbilityDef
     public string? ScriptId { get; set; }
     /// <summary>Optional: simple passive modifiers the engine applies automatically.</summary>
     public List<PassiveModifierDef> Modifiers { get; set; } = new();
+    /// <summary>Optional: makes an active ability usable by the engine (see <see cref="ActivationDef"/>).</summary>
+    public ActivationDef? Activate { get; set; }
+
+    [JsonIgnore] public bool IsScripted => Modifiers.Count > 0 || Activate != null || ScriptId != null;
+
+    /// <summary>How often it can be used, from the printed timing.</summary>
+    [JsonIgnore]
+    public string Frequency =>
+        Timing.Contains("Once Per Battle (Army)", StringComparison.OrdinalIgnoreCase) ? "battle-army"
+        : Timing.Contains("Once Per Battle", StringComparison.OrdinalIgnoreCase) ? "battle-unit"
+        : Timing.Contains("Once Per Battle Round (Army)", StringComparison.OrdinalIgnoreCase) ? "round-army"
+        : Timing.Contains("Once Per Turn (Army)", StringComparison.OrdinalIgnoreCase) ? "turn-army"
+        : "phase-unit";
 }
 
 public sealed class SpellDef
@@ -132,6 +230,11 @@ public sealed class SpellDef
     public string Target { get; set; } = "enemy";
     public string Text { get; set; } = "";
     public EffectDef? Effect { get; set; }
+    /// <summary>Further effects applied after <see cref="Effect"/>.</summary>
+    public List<EffectDef> Effects { get; set; } = new();
+
+    [JsonIgnore] public bool IsScripted => Effect != null || Effects.Count > 0;
+    [JsonIgnore] public IEnumerable<EffectDef> AllEffects => Effect is null ? Effects : Effects.Prepend(Effect);
 }
 
 /// <summary>An AoS4 warscroll.</summary>
@@ -203,6 +306,9 @@ public sealed class FactionData
     /// <summary>Warscroll ids used when no army is picked (e.g. for the AI).</summary>
     public List<string> DefaultArmy { get; set; } = new();
     public List<Warscroll> Warscrolls { get; set; } = new();
+
+    /// <summary>Problems found while loading (e.g. a script names an ability that does not exist).</summary>
+    [JsonIgnore] public List<string> LoadWarnings { get; } = new();
 
     public Warscroll Get(string id) => Warscrolls.FirstOrDefault(w => w.Id == id)
         ?? throw new KeyNotFoundException($"Warscroll '{id}' not found in faction '{Id}'");

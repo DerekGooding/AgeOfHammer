@@ -1,5 +1,6 @@
 using System.Numerics;
 using AgeOfHammer.Core.Combat;
+using AgeOfHammer.Core.Data;
 using AgeOfHammer.Core.Engine;
 using AgeOfHammer.Core.State;
 
@@ -47,14 +48,17 @@ public sealed class AiPlayer
     {
         var s = e.State;
         var key = (s.BattleRound, s.ActivePlayer, s.Phase);
-        if (key != _key) { _key = key; _handled.Clear(); }
+        if (key != _key) { _key = key; _handled.Clear(); _abilitiesTried.Clear(); }
 
         switch (e.Pending)
         {
             case PendingDefence pd: return DecideDefence(e, pd);
             case PendingReaction pr: return DecideReaction(e, pr);
             case PendingMove pm: return DecideMove(e, pm);
+            case PendingAbilityWindow: return TryAbility(e) ?? new DoneAbilities(Player);
         }
+
+        if (s.Phase != Phase.Deployment && TryAbility(e) is { } ability) return ability;
 
         return s.Phase switch
         {
@@ -67,6 +71,69 @@ public sealed class AiPlayer
             Phase.EndOfTurn => EndOfTurn(e),
             _ => new EndPhase(Player),
         };
+    }
+
+    // ---------------------------------------------------------------- abilities
+
+    private readonly HashSet<string> _abilitiesTried = new();
+
+    /// <summary>Uses the first scripted ability that looks worthwhile right now, or returns null.</summary>
+    private GameAction? TryAbility(GameEngine e)
+    {
+        foreach (var (unit, ability) in e.UsableAbilities(Player).ToList())
+        {
+            if (!_abilitiesTried.Add($"{unit.Id}|{ability.Name}")) continue;
+            var target = ChooseAbilityTarget(e, unit, ability);
+            if (target == null) continue;
+            return new UseAbility(Player, unit.Id, ability.Name, target == unit && ability.Activate!.Target == "self" ? null : [target.Id]);
+        }
+        return null;
+    }
+
+    /// <summary>The best target for an ability, or null if the AI judges it not worth using now.</summary>
+    private static Unit? ChooseAbilityTarget(GameEngine e, Unit unit, AbilityDef ability)
+    {
+        var s = e.State;
+        var act = ability.Activate!;
+        var effects = act.Effects;
+        bool HurtsRecipient(EffectDef fx) => fx.Type is "mortal" or "mortalPerModel" or "mortalDice" or "slayRoll";
+
+        // Self-harm (e.g. "Inflict D3 mortal damage on this unit, then +1 Attacks"): only if healthy and about to fight.
+        if (effects.Any(fx => fx.To == "self" && HurtsRecipient(fx)) && (unit.WoundsRemaining < 6 || !s.InCombat(unit))) return null;
+
+        var targets = e.AbilityTargets(unit, ability);
+        if (targets.Count == 0) return null;
+
+        if (act.Target == "enemy")
+        {
+            // Finish off what can be finished, otherwise hit the most valuable unit.
+            return targets.OrderBy(t => t.WoundsRemaining <= 3 ? 0 : 1).ThenByDescending(t => t.Warscroll.Points).First();
+        }
+
+        // Friendly or self targets: pick the one that benefits.
+        bool Contesting(Unit u) => Modifiers.ConditionHolds(s, "contesting", u, u, null);
+        bool AboutToFight(Unit u) => s.InCombat(u) || u.Charged ||
+                                     s.EnemiesOf(u).Any(en => GameState.Distance(u, en) <= e.MoveCharacteristic(u) + 7);
+        IEnumerable<Unit> useful = targets.Where(t =>
+        {
+            foreach (var fx in effects.Where(fx => fx.To != "self"))
+            {
+                switch (fx.Type)
+                {
+                    case "heal": if (t.DamagePoints > 0) return true; break;
+                    case "returnModels": if (t.Models.Any(m => m.Slain)) return true; break;
+                    case "buff":
+                        if (fx.Stat is "Control") { if (Contesting(t)) return true; }
+                        else if (fx.Stat is "Charge" or "ChargeDice") { if (e.CanChargeBasic(t) || s.Phase != Phase.Charge) return true; }
+                        else if (fx.Stat is "ShootAfterRun" or "ChargeAfterRun") return true;
+                        else if (AboutToFight(t)) return true;
+                        break;
+                }
+                if (HurtsRecipient(fx) && t.WoundsRemaining < 4) return false; // don't hurt fragile friends
+            }
+            return effects.All(fx => fx.To == "self");
+        });
+        return useful.OrderByDescending(t => t.Warscroll.Points).FirstOrDefault();
     }
 
     // ---------------------------------------------------------------- helpers
@@ -175,7 +242,7 @@ public sealed class AiPlayer
                 for (int i = 0; i < u.Warscroll.Spells.Count; i++)
                 {
                     var spell = u.Warscroll.Spells[i];
-                    if (spell.Effect == null) continue; // unscripted: casting would only risk a miscast
+                    if (!spell.IsScripted) continue; // unscripted: casting would only risk a miscast
                     if (e.State.Players[Player].SpellsCastThisTurn.Contains(spell.Name)) continue;
                     var target = e.SpellTargets(u, spell).FirstOrDefault();
                     if (target != null) return new CastSpell(Player, u.Id, i, target.Id);

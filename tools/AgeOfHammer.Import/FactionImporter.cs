@@ -23,11 +23,11 @@ public sealed partial class FactionImporter(Catalog catalog, int defaultArmyPoin
     private static readonly HashSet<string> FactionGroupTypes =
     [
         "battle-formation", "heroic-trait", "artefact-of-power", "spell-lore", "prayer-lore", "manifestation-lore",
-        "monstrous-traits", "rules-module",
+        "monstrous-traits",
     ];
 
     private static readonly HashSet<string> NonFactionGroupTypes =
-        ["regiment-of-renown", "army-of-renown", "general-rules", "supplemental-content"];
+        ["regiment-of-renown", "army-of-renown", "general-rules", "supplemental-content", "rules-module", "scars-of-war"];
 
     /// <summary>Display colours (hex) per faction; anything missing falls back to grey.</summary>
     private static readonly Dictionary<string, string> Colors = new()
@@ -310,7 +310,7 @@ public sealed partial class FactionImporter(Catalog catalog, int defaultArmyPoin
             var abilities = GroupAbilities(group, 0).Select(ImportAbility).ToList();
             if (abilities.Count == 0) continue;
             if (type == "battle-trait") faction.BattleTraits.AddRange(abilities);
-            else if (FactionGroupTypes.Contains(type) || !type.Contains("renown"))
+            else if (FactionGroupTypes.Contains(type) || !type.Contains("renown") && !group.GetProperty("name").GetString()!.Contains("Battleplan", StringComparison.OrdinalIgnoreCase))
                 faction.ContentGroups.Add(new ContentGroupDef { Type = type, Name = group.GetProperty("name").GetString()!, Abilities = abilities });
         }
     }

@@ -1,0 +1,143 @@
+{
+  // Stormcast Eternals ability scripts. Applied on load to data/factions/stormcast-eternals.json (see data/scripts/README.md).
+  // "abilities" entries apply to every ability with that name; "warscrolls" entries to one warscroll.
+  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): deep strike / Scions of the Storm,
+  // tokens, extra FIGHT activations, Ruination Chamber reactions, re-rolls, move-and-redeploy abilities.
+  "abilities": {
+    // ----- Battle traits
+    "Their Finest Hour": {
+      "activate": { "target": "friendly", "targetKeywords": ["STORMCAST ETERNALS"],
+        "effects": [
+          { "type": "buff", "stat": "Wound", "value": 1, "attackType": "Melee" },
+          { "type": "buff", "stat": "Save", "value": 1 } ] }
+    },
+
+    // ----- Passive modifiers
+    "Beast": { "modifiers": [ { "stat": "MaxControl", "value": 1 } ] },
+    "Marked For Destruction": { "modifiers": [ { "stat": "Hit", "value": 1, "attackType": "Ranged", "condition": "targetWithin:9",
+      "aura": { "side": "friendly", "keywords": ["VANGUARD CHAMBER"] } } ] },
+    "Cleaving Blow": { "modifiers": [ { "stat": "Damage", "value": 1, "weapon": "Thunderaxe", "condition": "targetModels>=10" } ] },
+    "Aura Of Purity": { "modifiers": [ { "stat": "Ward", "value": 5, "condition": "charged",
+      "aura": { "side": "friendly", "range": 12, "wholly": true, "keywords": ["STORMCAST ETERNALS"] } } ] },
+    "Fires Of Retribution": { "modifiers": [
+      { "stat": "Attacks", "value": 1, "attackType": "Melee", "condition": "damagePoints>=5 & damagePoints<10" },
+      { "stat": "Attacks", "value": 2, "attackType": "Melee", "condition": "damagePoints>=10" } ] },
+    "Regalia Fulmentarus": { "modifiers": [ { "stat": "Cast", "value": 2 } ] },
+    "Stalwart Defenders": { "modifiers": [ { "stat": "Control", "value": 3, "condition": "contestingFriendlyTerritory" } ] },
+    "Aquatic Illusions": { "modifiers": [ { "stat": "HitAgainst", "value": -1 } ] },
+    // APPROX: assumes the Gryph-hound token is always on the battlefield.
+    "Loyal Gryph-Hound": { "modifiers": [ { "stat": "Ward", "value": 5 } ] },
+    // APPROX: assumes the Memorian token is always on the battlefield.
+    "Memorian": { "modifiers": [ { "stat": "Control", "value": 3,
+      "aura": { "side": "friendly", "range": 12, "wholly": true, "keywords": ["RUINATION CHAMBER"] } } ] },
+    // APPROX: casting only (the engine has no chanting yet); assumes the Gryph-crow token is present.
+    "Sense Unholy Sorcery": { "modifiers": [ { "stat": "Cast", "value": -1, "aura": { "side": "enemy", "range": 12 } } ] },
+    "Justice From Azyr": { "modifiers": [ { "stat": "Damage", "value": 1, "weapon": "Whirlwind Axes", "condition": "targetKeyword:HERO" } ] },
+    // APPROX: the companions' own ward (while a Blacktalons hero is near) is not modelled.
+    "Shield Of Azyr": { "modifiers": [ { "stat": "Ward", "value": 5,
+      "aura": { "side": "friendly", "range": 3, "wholly": true, "keywords": ["THE BLACKTALONS", "HERO"], "includeSelf": false } } ] },
+    "Heralds Of Righteousness": { "modifiers": [ { "stat": "ChargeDice", "value": 1 } ] },
+    "On Wings Of Brilliance": { "modifiers": [ { "stat": "ChargeDice", "value": 1 } ] },
+    "Dispersed Formation": { "modifiers": [ { "stat": "CoherencyRange", "value": 2 } ] },
+    "Lord Of The Hammerhands": { "modifiers": [ { "stat": "Control", "value": 3,
+      "aura": { "side": "friendly", "range": 12, "wholly": true, "keywords": ["WARRIOR CHAMBER"] } } ] },
+    "Lightning Strikes": { "modifiers": [ { "stat": "Damage", "value": 1, "weapon": "Celestial Greatsword", "condition": "targetModels>=5" } ] },
+    "The Prime Huntress": { "modifiers": [ { "stat": "Damage", "multiply": 2, "weapon": "Thengavar", "condition": "targetKeyword:MONSTER" } ] },
+
+    // ----- Activated abilities
+    "Brace For Impact": {
+      "activate": { "target": "enemy", "inCombat": true, "targetRequires": "targetCharged",
+        "roll": "D6", "rollCount": "models", "success": 6,
+        "effects": [ { "type": "buff", "stat": "StrikeLast", "value": 1 } ] }
+    },
+    "Thunderstruck": {
+      "activate": { "target": "enemy", "inCombat": true, "roll": "D6", "success": 3,
+        "effects": [ { "type": "buff", "stat": "NoCommands", "value": 1 } ] }
+    },
+    "Soul-Shaking Roar": {
+      "activate": { "target": "enemy", "inCombat": true, "roll": "D6", "success": 3,
+        "effects": [ { "type": "buff", "stat": "NoCommands", "value": 1 } ] }
+    },
+    "Impaling Strikes": {
+      "activate": { "target": "enemy", "range": 1, "requires": "chargedThisPhase", "roll": "D3", "success": 2,
+        "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
+    "Azyr Unleashed": {
+      "activate": { "target": "enemy", "range": 1, "requires": "chargedThisPhase", "roll": "D3", "success": 2,
+        "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
+    "Saintly Assault": {
+      "activate": { "target": "friendly", "range": 6, "wholly": true, "targetKeywords": ["STORMCAST ETERNALS", "INFANTRY"], "maxTargets": 3,
+        "effects": [
+          { "type": "buff", "stat": "Charge", "value": 1 },
+          { "type": "buff", "stat": "Attacks", "value": 1, "attackType": "Melee" } ] }
+    },
+    // The Retreat part is not modelled.
+    "Dark Flight": {
+      "activate": { "target": "enemy", "inCombat": true,
+        "effects": [ { "type": "slayRoll", "amount": "1", "healthOffset": 1 } ] }
+    },
+    "Calamitous Tail Sweep": {
+      "activate": { "target": "enemy", "inCombat": true, "effects": [ { "type": "mortalPerModel", "threshold": 5 } ] }
+    },
+    "Ancient Master Of War": {
+      "activate": { "target": "enemy", "inCombat": true,
+        "effects": [ { "type": "buff", "stat": "Attacks", "value": -1, "attackType": "Melee" } ] }
+    },
+    // APPROX: picks the -1 to hit option; modelled as -1 to hit for attacks that target this unit.
+    "The Light Of Sigmar": {
+      "activate": { "target": "self", "requires": "inCombat", "roll": "D6", "success": 3,
+        "effects": [ { "type": "buff", "stat": "HitAgainst", "value": -1, "attackType": "Melee" } ] }
+    },
+    "Wrath Of The Draconith": {
+      "activate": { "target": "friendly", "range": 3, "targetNames": ["Stormdrake Guard", "Stormdrake Guard (1 model)"], "roll": "D6", "success": 2,
+        "effects": [
+          { "type": "buff", "stat": "Attacks", "value": 1, "weapon": "Fangs and Talons" },
+          { "type": "buff", "stat": "Attacks", "value": 1, "weapon": "Fangs and Talons", "to": "self" } ] }
+    },
+    "Relic Censer": {
+      "activate": { "target": "enemy", "range": 12, "roll": "D6", "success": 2,
+        "effects": [ { "type": "buff", "stat": "WardRoll", "value": -1 } ] }
+    },
+    // APPROX: picks 2 targets instead of D3.
+    "The Banner Of The Reforged": {
+      "activate": { "target": "friendly", "range": 12, "wholly": true, "targetKeywords": ["STORMCAST ETERNALS"], "maxTargets": 2,
+        "effects": [
+          { "type": "buff", "stat": "Control", "value": 3 },
+          { "type": "heal", "amount": "D3" } ] }
+    },
+    "Vanguard Chamber": {
+      "activate": { "target": "self", "effects": [
+        { "type": "buff", "stat": "ShootAfterRun", "value": 1 },
+        { "type": "buff", "stat": "ChargeAfterRun", "value": 1 } ] }
+    },
+    "Cavernous Jaws": {
+      "activate": { "target": "enemy", "inCombat": true, "effects": [ { "type": "slayRoll", "amount": "3" } ] }
+    },
+    "Lord Of The Host": {
+      "activate": { "target": "friendly", "range": 12, "wholly": true, "other": true, "targetKeywords": ["EXTREMIS CHAMBER"], "maxTargets": 0,
+        "effects": [ { "type": "buff", "stat": "Attacks", "value": 1 } ] }
+    },
+    // APPROX: lasts the turn wherever the target goes (the real ability needs it to stay within 12").
+    "Direct The Assault": {
+      "activate": { "target": "friendly", "range": 12, "wholly": true, "targetKeywords": ["RUINATION CHAMBER"], "targetExcludeKeywords": ["HERO"],
+        "effects": [ { "type": "buff", "stat": "Control", "value": 5 } ] }
+    },
+    "Hold The Shieldwall": {
+      "activate": { "target": "self", "requires": "notCharged & engagedWithCharger", "roll": "D6", "success": 4,
+        "effects": [ { "type": "buff", "stat": "StrikeFirst", "value": 1 } ] }
+    }
+  },
+
+  "warscrolls": {
+    // "Battle Damaged": the weapon's Attacks drop to a fixed value at 10+ damage points.
+    "drakesworn-templar": { "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -3, "weapon": "Cavernous Jaws", "condition": "damagePoints>=10" } ] } } },
+    "lord-celestant-on-stardrake": { "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -3, "weapon": "Cavernous Jaws", "condition": "damagePoints>=10" } ] } } },
+    "ionus-cryptborn-warden-of-lost-souls": { "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -2, "weapon": "Ancient Claws", "condition": "damagePoints>=10" } ] } } },
+    "krondys-son-of-dracothion": {
+      "abilities": { "Battle Damaged": { "modifiers": [ { "stat": "Attacks", "value": -2, "weapon": "Apex Maw", "condition": "damagePoints>=10" } ] } },
+      "spells": { "Atavistic Tempest": { "effect": { "type": "buff", "stat": "Hit", "value": -1, "expiry": "UntilYourNextTurn" } } }
+    },
+    "stormcoven": { "spells": { "Aethershock": { "effect": { "type": "buff", "stat": "StrikeLast", "value": 1 } } } }
+  }
+}

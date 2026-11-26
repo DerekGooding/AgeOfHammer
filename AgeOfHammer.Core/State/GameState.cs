@@ -7,12 +7,43 @@ namespace AgeOfHammer.Core.State;
 
 public enum Phase { Deployment, Hero, Movement, Shooting, Charge, Combat, EndOfTurn, GameOver }
 
-public enum Stat { Hit, Wound, Rend, Attacks, Damage, Save, Ward, Move, Control, Charge, Cast, StrikeFirst, StrikeLast }
+public enum Stat
+{
+    Hit, Wound, Rend, Attacks, Damage, Save, Ward, Move, Control, Charge, Cast, StrikeFirst, StrikeLast,
+    /// <summary>Modifier to hit rolls of attacks that target this unit.</summary>
+    HitAgainst,
+    /// <summary>Modifier to wound rolls of attacks that target this unit.</summary>
+    WoundAgainst,
+    /// <summary>Caps the unit's control score.</summary>
+    MaxControl,
+    /// <summary>Extra dice for charge rolls (to a maximum of 3).</summary>
+    ChargeDice,
+    /// <summary>Flag: retreating does not inflict mortal damage on this unit.</summary>
+    NoRetreatDamage,
+    /// <summary>Coherency range in inches, if more than 1/2".</summary>
+    CoherencyRange,
+    /// <summary>Flag: the unit cannot use or receive commands.</summary>
+    NoCommands,
+    /// <summary>Modifier to this unit's ward rolls.</summary>
+    WardRoll,
+    /// <summary>Flag: can shoot even after running or retreating.</summary>
+    ShootAfterRun,
+    /// <summary>Flag: can charge even after running or retreating.</summary>
+    ChargeAfterRun,
+    /// <summary>Attacks that target this unit fail on an unmodified hit roll of this value or less.</summary>
+    UnmodifiedHitFailsAgainst,
+}
 
-public enum Expiry { EndOfPhase, EndOfTurn, EndOfRound, Permanent }
+public enum Expiry { EndOfPhase, EndOfTurn, EndOfRound, UntilYourNextTurn, Permanent }
 
 /// <summary>A temporary modifier on a unit (from a command, spell or ability).</summary>
-public sealed record Buff(string Source, Stat Stat, int Value, Expiry Expiry, AttackType AppliesTo = AttackType.Any);
+public sealed record Buff(string Source, Stat Stat, int Value, Expiry Expiry, AttackType AppliesTo = AttackType.Any)
+{
+    /// <summary>Only applies to weapons whose name contains this text.</summary>
+    public string? Weapon { get; init; }
+    /// <summary>The player whose ability created it (for <see cref="Expiry.UntilYourNextTurn"/>).</summary>
+    public int SourcePlayer { get; init; } = -1;
+}
 
 public sealed class Model
 {
@@ -56,8 +87,13 @@ public sealed class Unit
     public List<Vector2> AlivePositions => Alive.Select(m => m.Position).ToList();
     public Vector2 Centroid => Geo.Centroid(AlivePositions);
 
-    public int BuffTotal(Stat stat, AttackType type = AttackType.Any) =>
-        Buffs.Where(b => b.Stat == stat && (b.AppliesTo == AttackType.Any || type == AttackType.Any || b.AppliesTo == type)).Sum(b => b.Value);
+    public int BuffTotal(Stat stat, AttackType type = AttackType.Any, string? weapon = null) =>
+        Buffs.Where(b => b.Stat == stat && (b.AppliesTo == AttackType.Any || type == AttackType.Any || b.AppliesTo == type)
+                         && (b.Weapon == null || (weapon != null && weapon.Contains(b.Weapon, StringComparison.OrdinalIgnoreCase))))
+             .Sum(b => b.Value);
+
+    /// <summary>Damage points the unit has taken (including slain models).</summary>
+    public int DamagePoints => Warscroll.Health * Models.Count - WoundsRemaining;
 
     public bool HasBuff(Stat stat) => Buffs.Any(b => b.Stat == stat);
 
@@ -102,6 +138,9 @@ public sealed class GameState
     public bool SecondTurnOfRound { get; set; }
     public int? Winner { get; set; }
     public bool IsDraw { get; set; }
+
+    /// <summary>Keys of abilities already used, for once-per-phase/turn/round/battle limits.</summary>
+    public HashSet<string> UsedAbilities { get; } = new();
 
     public List<string> Log { get; } = new();
     public event Action<string>? Logged;
@@ -170,7 +209,8 @@ public sealed class GameState
         int total = 0;
         foreach (var u in LiveUnitsOf(player))
         {
-            int control = Math.Max(0, u.Warscroll.Control + u.BuffTotal(Stat.Control));
+            int control = Math.Max(0, u.Warscroll.Control + Combat.Modifiers.Get(this, u, Stat.Control, AttackType.Any));
+            if (Combat.Modifiers.Lowest(this, u, Stat.MaxControl) is int cap) control = Math.Min(control, cap);
             foreach (var m in u.Alive)
                 if (Geo.Distance(m.Position, u.BaseRadius, o.Position, Objective.MarkerRadius) <= Objective.ControlRange + Geo.Epsilon)
                     total += control;

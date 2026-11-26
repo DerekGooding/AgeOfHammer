@@ -8,7 +8,7 @@ using NVec = System.Numerics.Vector2;
 
 namespace AgeOfHammer.Client;
 
-public enum TargetMode { None, Shoot, Fight, Spell, PowerThrough }
+public enum TargetMode { None, Shoot, Fight, Spell, PowerThrough, Ability }
 
 /// <summary>
 /// The battle: owns the <see cref="GameEngine"/>, drives the AI, handles selection/targeting and builds the HUD.
@@ -39,6 +39,7 @@ public partial class BattleScreen : Node
     private readonly int[] _perRowOptions = [5, 10, 3, 2, 1];
     private int _perRowIndex;
     private int _spellIndex;
+    private string _abilityName = "";
     private bool _allOutAttack;
     private double _aiTimer;
     private double _aiDelay = 0.45;
@@ -359,6 +360,7 @@ public partial class BattleScreen : Node
                 case TargetMode.Fight: Do(new Fight(d, Selected.Id, t.Id, _allOutAttack)); break;
                 case TargetMode.Spell: Do(new CastSpell(d, Selected.Id, _spellIndex, t.Id)); break;
                 case TargetMode.PowerThrough: Do(new PowerThrough(d, Selected.Id, t.Id)); break;
+                case TargetMode.Ability: Do(new UseAbility(d, Selected.Id, _abilityName, [t.Id])); break;
             }
             return;
         }
@@ -391,6 +393,8 @@ public partial class BattleScreen : Node
             TargetMode.Spell when _spellIndex < Selected.Warscroll.Spells.Count =>
                 Engine.SpellTargets(Selected, Selected.Warscroll.Spells[_spellIndex]),
             TargetMode.PowerThrough => Engine.PowerThroughTargets(Selected),
+            TargetMode.Ability when Engine.ActivatedAbilities(Selected).FirstOrDefault(a => a.Name == _abilityName) is { } ab =>
+                Engine.AbilityTargets(Selected, ab),
             _ => [],
         };
     }
@@ -521,6 +525,16 @@ public partial class BattleScreen : Node
                 Btn("Decline", () => Do(new DeclineReaction(d)));
                 break;
 
+            case PendingAbilityWindow aw:
+                Text($"Your opponent ended the {PhaseName(aw.Phase)}. You can use your units' abilities now.", Palette.Accent);
+                foreach (var (unit, ability) in Engine.UsableAbilities(d).Take(10))
+                {
+                    var (uu, ab) = (unit, ability);
+                    Btn($"{uu.Name}: {ab.Name}", () => StartAbility(uu, ab), tip: AbilityTip(ab));
+                }
+                Btn("Done", () => Do(new DoneAbilities(d)));
+                break;
+
             case PendingMove pm:
                 string kind = pm.Kind switch
                 {
@@ -577,7 +591,9 @@ public partial class BattleScreen : Node
                 sb.Append($"[cell]{v}  [/cell]");
         }
         sb.Append("[/table]\n");
-        foreach (var a in ws.Abilities)
+        foreach (var a in ws.Abilities.Where(a => a.IsScripted))
+            sb.Append($"[color=#{Palette.Hex(Palette.Good)}][hint={Ui.Bb(AbilityTip(a))}]+ {Ui.Bb(a.Name)} ({Ui.Bb(a.Timing)})[/hint][/color]\n");
+        foreach (var a in ws.Abilities.Where(a => !a.IsScripted))
             sb.Append($"[hint={Ui.Bb(a.Text)}]* {Ui.Bb(a.Name)} ({Ui.Bb(a.Timing)})[/hint]\n");
         foreach (var sp in ws.Spells)
             sb.Append($"[hint={Ui.Bb(sp.Text)}]~ {Ui.Bb(sp.Name)} (cast {sp.CastingValue}+)[/hint]\n");
@@ -600,7 +616,9 @@ public partial class BattleScreen : Node
     private void BuildActions()
     {
         var u = Selected;
-        if (u == null || !HumanDecides || u.Owner != Decider || Engine.Pending != null || !u.OnBattlefield) return;
+        if (u == null || !HumanDecides || u.Owner != Decider || !u.OnBattlefield) return;
+        if (Engine.Pending is PendingAbilityWindow) { AbilityButtons(u); return; }
+        if (Engine.Pending != null) return;
         int me = Decider;
 
         void AoaToggle()
@@ -658,8 +676,35 @@ public partial class BattleScreen : Node
                     Btn("Power Through (2 CP): D3 mortal - click target", () => Mode = TargetMode.PowerThrough, on: Mode == TargetMode.PowerThrough);
                 break;
         }
+        AbilityButtons(u);
         if (Mode != TargetMode.None) Text("Click a target highlighted in red (Esc / right-click to cancel).", Palette.Accent);
     }
+
+    /// <summary>Buttons for the selected unit's scripted abilities that can be used right now.</summary>
+    private void AbilityButtons(Unit u)
+    {
+        foreach (var ability in Engine.ActivatedAbilities(u).Where(a => Engine.CanUseAbility(Decider, u, a)).ToList())
+        {
+            var ab = ability;
+            Btn($"Use: {ab.Name}", () => StartAbility(u, ab), on: Mode == TargetMode.Ability && _abilityName == ab.Name, tip: AbilityTip(ab));
+        }
+    }
+
+    private void StartAbility(Unit unit, AgeOfHammer.Core.Data.AbilityDef ability)
+    {
+        Selected = unit;
+        if (ability.Activate!.Target == "self") Do(new UseAbility(Decider, unit.Id, ability.Name));
+        else
+        {
+            Mode = TargetMode.Ability;
+            _abilityName = ability.Name;
+            _panelSignature = "";
+        }
+    }
+
+    private static string AbilityTip(AgeOfHammer.Core.Data.AbilityDef a) =>
+        $"{a.Name} ({a.Timing})\n" + (a.Declare != null ? a.Declare + "\n" : "") + a.Text +
+        (a.IsScripted ? "\n[Automated by the engine]" : "");
 
     private void ShowGameOver()
     {

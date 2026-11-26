@@ -11,11 +11,33 @@ public static class DataLoader
         AllowTrailingCommas = true,
     };
 
-    public static FactionData LoadFaction(string path) => ParseFaction(File.ReadAllText(path));
-
-    public static FactionData ParseFaction(string json)
+    /// <summary>
+    /// Loads a faction file and applies its ability scripts from data/scripts/&lt;faction-id&gt;.json, if present.
+    /// </summary>
+    public static FactionData LoadFaction(string path)
     {
-        var faction = JsonSerializer.Deserialize<FactionData>(json, Options) ?? throw new InvalidDataException("Empty faction file");
+        var node = DataPatch.ParseObject(File.ReadAllText(path));
+        string id = (string?)node["id"] ?? "";
+        var warnings = new List<string>();
+        string scripts = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(path)))!, "scripts", id + ".json");
+        if (File.Exists(scripts))
+        {
+            try { warnings.AddRange(DataPatch.Apply(node, DataPatch.ParseObject(File.ReadAllText(scripts))).Select(u => $"{Path.GetFileName(scripts)}: no {u}")); }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+            {
+                throw new InvalidDataException($"{scripts} is invalid: {ex.Message}", ex);
+            }
+        }
+        var faction = FromNode(node);
+        faction.LoadWarnings.AddRange(warnings);
+        return faction;
+    }
+
+    public static FactionData ParseFaction(string json) => FromNode(DataPatch.ParseObject(json));
+
+    private static FactionData FromNode(System.Text.Json.Nodes.JsonObject node)
+    {
+        var faction = node.Deserialize<FactionData>(Options) ?? throw new InvalidDataException("Empty faction file");
         Validate(faction);
         foreach (var w in faction.Warscrolls) w.FactionId = faction.Id;
         return faction;

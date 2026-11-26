@@ -119,7 +119,9 @@ public sealed partial class GameEngine
             }
         }
         State.Write($"{caster.Name} casts {spell.Name} ({roll} vs {spell.CastingValue}).");
-        ApplyEffect(spell.Effect, caster, target, spell.Name);
+        if (!spell.IsScripted) State.Write($"({spell.Name} has no scripted effect yet.)");
+        foreach (var effect in spell.AllEffects)
+            ApplyEffect(effect, caster, effect.To == "self" ? caster : target, spell.Name, roll);
         CheckWipeout();
         return ActionResult.Success;
     }
@@ -127,32 +129,7 @@ public sealed partial class GameEngine
     private void ApplyEffect(EffectDef? effect, Unit source, Unit target, string name)
     {
         if (effect == null) { State.Write($"({name} has no scripted effect yet.)"); return; }
-        switch (effect.Type.ToLowerInvariant())
-        {
-            case "mortal":
-                AttackResolver.InflictMortal(State, target, DiceExpression.Parse(effect.Amount).Roll(State.Dice), name);
-                break;
-            case "heal":
-                int heal = DiceExpression.Parse(effect.Amount).Roll(State.Dice);
-                int done = 0;
-                foreach (var m in target.Alive.Where(m => m.Damage > 0))
-                {
-                    int h = Math.Min(heal - done, m.Damage);
-                    m.Damage -= h;
-                    done += h;
-                }
-                State.Write($"{name}: healed {done} on {target.Name}.");
-                break;
-            case "buff":
-                if (Enum.TryParse<Stat>(effect.Stat, true, out var stat))
-                {
-                    var exp = Enum.TryParse<Expiry>(effect.Expiry, true, out var e) ? e : Expiry.EndOfTurn;
-                    var at = Enum.TryParse<AttackType>(effect.AttackType, true, out var t) ? t : AttackType.Any;
-                    target.Buffs.Add(new Buff(name, stat, effect.Value, exp, at));
-                    State.Write($"{name}: {target.Name} gets {effect.Value:+#;-#;0} {stat} ({exp}).");
-                }
-                break;
-        }
+        ApplyEffect(effect, source, target, name, gateRoll: 0);
     }
 
     // ================================================================== MOVEMENT PHASE
@@ -194,7 +171,8 @@ public sealed partial class GameEngine
                 if (!CanRetreat(unit)) return ActionResult.Fail("That unit cannot retreat.");
                 unit.Retreated = true;
                 unit.Moved = true;
-                AttackResolver.InflictMortal(State, unit, State.Dice.D3(), $"{unit.Name} retreats");
+                if (Modifiers.HasFlag(State, unit, Stat.NoRetreatDamage)) State.Write($"{unit.Name} retreats unharmed.");
+                else AttackResolver.InflictMortal(State, unit, State.Dice.D3(), $"{unit.Name} retreats");
                 CheckWipeout();
                 if (unit.IsDestroyed || State.Phase == Phase.GameOver) return ActionResult.Success;
                 break;
@@ -239,7 +217,7 @@ public sealed partial class GameEngine
                     }
         }
         if (Overlaps(unit, positions)) return "Models cannot overlap other models.";
-        if (!Geo.IsCoherent(positions, r)) return "Unit must end its move in coherency.";
+        if (!Geo.IsCoherent(positions, r, CoherencyRange(unit))) return "Unit must end its move in coherency.";
 
         if (pm.Kind == MoveKind.Charge)
         {
@@ -297,7 +275,8 @@ public sealed partial class GameEngine
     }
 
     public bool CanShootBasic(Unit unit) =>
-        unit.OnBattlefield && !unit.Shot && !unit.Ran && !unit.Retreated && UsableRangedWeapons(unit).Count > 0;
+        unit.OnBattlefield && !unit.Shot && UsableRangedWeapons(unit).Count > 0
+        && (!(unit.Ran || unit.Retreated) || Modifiers.HasFlag(State, unit, Stat.ShootAfterRun));
 
     public bool CanShoot(Unit unit) =>
         State.Phase == Phase.Shooting && Pending == null && unit.Owner == State.ActivePlayer && CanShootBasic(unit)
@@ -329,7 +308,8 @@ public sealed partial class GameEngine
     public const float MaxChargeDistance = 12f;
 
     public bool CanChargeBasic(Unit unit) =>
-        unit.OnBattlefield && !unit.ChargeAttempted && !unit.Ran && !unit.Retreated && !State.InCombat(unit)
+        unit.OnBattlefield && !unit.ChargeAttempted && !State.InCombat(unit)
+        && (!(unit.Ran || unit.Retreated) || Modifiers.HasFlag(State, unit, Stat.ChargeAfterRun))
         && State.EnemiesOf(unit).Any(e => GameState.Distance(unit, e) <= MaxChargeDistance);
 
     public bool CanCharge(Unit unit) =>
@@ -346,7 +326,7 @@ public sealed partial class GameEngine
     private void StartCharge(Unit unit, int player, Action? then)
     {
         unit.ChargeAttempted = true;
-        int roll = State.Dice.Roll2D6() + Modifiers.Get(State, unit, Stat.Charge, AttackType.Any);
+        int roll = ChargeRoll(unit);
         State.Write($"{unit.Name} declares a charge: rolled {roll}\".");
         bool canReroll = CanUseCommand(player, Commands.ForwardToVictory, unit);
         if (!ChargeReachable(unit, roll) && !canReroll)
@@ -358,6 +338,19 @@ public sealed partial class GameEngine
         Pending = new PendingMove { Decider = player, Unit = unit, Kind = MoveKind.Charge, Allowance = roll, CanReroll = canReroll, Then = then };
     }
 
+    /// <summary>2D6 (or up to 3D6 with ChargeDice modifiers) plus charge roll modifiers.</summary>
+    private int ChargeRoll(Unit unit)
+    {
+        int dice = Math.Clamp(2 + Modifiers.Get(State, unit, Stat.ChargeDice, AttackType.Any), 1, 3);
+        int total = 0;
+        for (int i = 0; i < dice; i++) total += State.Dice.D6();
+        return total + Modifiers.Get(State, unit, Stat.Charge, AttackType.Any);
+    }
+
+    /// <summary>Coherency range for a unit: 1/2" unless an ability says otherwise.</summary>
+    public float CoherencyRange(Unit unit) =>
+        MathF.Max(Geo.CoherencyRange, Modifiers.Get(State, unit, Stat.CoherencyRange, AttackType.Any));
+
     public bool ChargeReachable(Unit unit, float roll) =>
         State.EnemiesOf(unit).Any(e => GameState.Distance(unit, e) <= roll + Geo.ChargeEndRange);
 
@@ -367,7 +360,7 @@ public sealed partial class GameEngine
             return ActionResult.Fail("Cannot re-roll this charge.");
         PayCommand(pm.Decider, Commands.ForwardToVictory, pm.Unit);
         pm.CanReroll = false;
-        pm.Allowance = State.Dice.Roll2D6() + Modifiers.Get(State, pm.Unit, Stat.Charge, AttackType.Any);
+        pm.Allowance = ChargeRoll(pm.Unit);
         State.Write($"{pm.Unit.Name} re-rolls the charge: {pm.Allowance}\".");
         if (!ChargeReachable(pm.Unit, pm.Allowance)) return DoCancelMove(pm);
         return ActionResult.Success;
