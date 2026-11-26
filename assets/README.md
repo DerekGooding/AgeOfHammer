@@ -4,7 +4,7 @@ This pipeline makes unit icons and sound effects for the Godot client from versi
 
 | File | Purpose |
 |---|---|
-| `pipeline.json` | Generator service URLs, the default backends, and size/loudness settings. `outputRoot` is where approved files go (`client/AgeOfHammer.Client/assets`). |
+| `pipeline.json` | Generator service URLs, the default backends, and size/loudness settings. `outputRoot` is where approved files go (`AgeOfHammer.Client/assets`). |
 | `style.json` | Shared prompt templates and colour palettes. `categoryPalettes` maps a faction id to a palette. Bumping `version` makes every asset stale. |
 | `models.json` | Each backend's model and license. Only `approved` and `capped` models are allowed to generate. |
 | `specs.json` | The assets to make. Icons name a warscroll id from `data/factions`. Sounds name `event:<SoundEvent>`; the list of events is in `tools/AgeOfHammer.Assets/AssetPlanner.cs`. |

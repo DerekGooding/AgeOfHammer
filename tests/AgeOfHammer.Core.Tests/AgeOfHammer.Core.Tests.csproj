@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AgeOfHammer.Core\AgeOfHammer.Core.csproj" />
+    <ProjectReference Include="..\..\AgeOfHammer.Core\AgeOfHammer.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

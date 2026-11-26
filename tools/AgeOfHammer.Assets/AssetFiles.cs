@@ -11,7 +11,7 @@ public sealed record PipelineConfig
     public string AudioService { get; init; } = "http://127.0.0.1:8412";
     public string ImageBackend { get; init; } = "procedural-image";
     public string AudioBackend { get; init; } = "procedural-audio";
-    public string OutputRoot { get; init; } = "client/AgeOfHammer.Client/assets";
+    public string OutputRoot { get; init; } = "AgeOfHammer.Client/assets";
     public IconSettings Icon { get; init; } = new();
     public SfxSettings Sfx { get; init; } = new();
 }

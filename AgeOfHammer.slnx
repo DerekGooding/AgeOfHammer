@@ -1,13 +1,8 @@
 <Solution>
-  <Folder Name="/client/">
-    <Project Path="client/AgeOfHammer.Client/AgeOfHammer.Client.csproj">
-      <BuildType Project="Debug" />
-    </Project>
-  </Folder>
-  <Folder Name="/src/">
-    <Project Path="src/AgeOfHammer.Core/AgeOfHammer.Core.csproj" />
-    <Project Path="src/AgeOfHammer.Game/AgeOfHammer.Game.csproj" />
-  </Folder>
+  <Project Path="AgeOfHammer.Client/AgeOfHammer.Client.csproj">
+    <BuildType Project="Debug" />
+  </Project>
+  <Project Path="AgeOfHammer.Core/AgeOfHammer.Core.csproj" />
   <Folder Name="/tests/">
     <Project Path="tests/AgeOfHammer.Core.Tests/AgeOfHammer.Core.Tests.csproj" />
   </Folder>

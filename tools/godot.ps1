@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
     Runs the repo's own Godot (tools/godot) with any arguments, e.g.
-      tools/godot.ps1 --path client/AgeOfHammer.Client                 # play
-      tools/godot.ps1 -e --path client/AgeOfHammer.Client              # open the editor
-      tools/godot.ps1 --headless --path client/AgeOfHammer.Client --smoke # AI vs AI smoke test
+      tools/godot.ps1 --path AgeOfHammer.Client                 # play
+      tools/godot.ps1 -e --path AgeOfHammer.Client              # open the editor
+      tools/godot.ps1 --headless --path AgeOfHammer.Client --smoke # AI vs AI smoke test
     Run tools/get-godot.ps1 first on a fresh clone.
 #>
 $exe = Get-ChildItem (Join-Path $PSScriptRoot "godot") -Filter "Godot_v*_mono_win64_console.exe" -ErrorAction SilentlyContinue | Select-Object -First 1

@@ -4,7 +4,7 @@
   "audioService": "http://127.0.0.1:8412",
   "imageBackend": "procedural-image",
   "audioBackend": "procedural-audio",
-  "outputRoot": "client/AgeOfHammer.Client/assets",
+  "outputRoot": "AgeOfHammer.Client/assets",
   "icon": {
     "size": 256,
     "candidates": 4,

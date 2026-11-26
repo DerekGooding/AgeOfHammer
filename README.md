@@ -14,10 +14,10 @@ dotnet build                                                    # builds the eng
 Then:
 
 ```powershell
-tools/godot.ps1 --path client/AgeOfHammer.Client                   # play
-tools/godot.ps1 --path client/AgeOfHammer.Client --watch           # watch AI vs AI
-tools/godot.ps1 -e --path client/AgeOfHammer.Client                # open the Godot editor
-tools/godot.ps1 --headless --path client/AgeOfHammer.Client --smoke  # play a full AI game headless; exit code 0 = OK
+tools/godot.ps1 --path AgeOfHammer.Client                   # play
+tools/godot.ps1 --path AgeOfHammer.Client --watch           # watch AI vs AI
+tools/godot.ps1 -e --path AgeOfHammer.Client                # open the Godot editor
+tools/godot.ps1 --headless --path AgeOfHammer.Client --smoke  # play a full AI game headless; exit code 0 = OK
 dotnet test                                                        # rules engine tests
 ```
 
@@ -42,9 +42,8 @@ dotnet test                                                        # rules engin
 
 | Path | What it is |
 |---|---|
-| `src/AgeOfHammer.Core` | The rules engine, written in pure C# with no MonoGame dependency. |
-| `client/AgeOfHammer.Client` | The Godot 4.7 C# frontend. `Scripts/` holds the screens (menu, army, battle), `BoardView` (battlefield drawing and mouse input) and `LabelLayer` (screen-space labels). The UI is built in code; `Main.tscn` is the only scene. |
-| `src/AgeOfHammer.Game` | The previous MonoGame frontend, superseded by the Godot client. |
+| `AgeOfHammer.Core` | The rules engine, written in pure C# with no Godot dependency. |
+| `AgeOfHammer.Client` | The Godot 4.7 C# frontend. `Scripts/` holds the screens (menu, army, battle), `BoardView` (battlefield drawing and mouse input) and `LabelLayer` (screen-space labels). The UI is built in code; `Main.tscn` is the only scene. |
 | `tools/get-godot.ps1`, `tools/godot.ps1` | Download and run the repo-local Godot install. |
 | `tools/AgeOfHammer.Balance` | A headless AI-vs-AI sweep, e.g. `dotnet run --project tools/AgeOfHammer.Balance -- --seeds 200 --details`. It reports win rates, VP and per-unit survival and damage. `--data <dir>` compares an edited copy of `data/`. |
 | `tools/AgeOfHammer.Assets`, `tools/asset-services`, `assets/` | The icon and sound pipeline: unit icons per warscroll and sounds per game event. See [assets/README.md](assets/README.md). |
@@ -52,7 +51,7 @@ dotnet test                                                        # rules engin
 | `data/factions/*.json` | Warscrolls. Add a file here to add a faction. |
 | `data/battleplans/*.json` | Battlefield size, territories, objectives, terrain and scoring. |
 
-Inside `src/AgeOfHammer.Core`:
+Inside `AgeOfHammer.Core`:
 
 | Folder | Contents |
 |---|---|
