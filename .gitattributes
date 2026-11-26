@@ -1,0 +1,19 @@
+# Store text with LF line endings in the repo; check out with the platform's native endings.
+* text=auto
+
+# Windows-only files keep CRLF in the working tree everywhere.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.sln text eol=crlf
+
+# Binary assets: never touch line endings or diff as text.
+*.png binary
+*.jpg binary
+*.ico binary
+*.bmp binary
+*.ogg binary
+*.wav binary
+*.ttf binary
+*.otf binary
+*.nupkg binary
