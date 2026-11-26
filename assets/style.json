@@ -1,0 +1,33 @@
+{
+  // Bump "version" whenever a change here should regenerate every asset (it is part of each asset's hash).
+  "version": 1,
+  "name": "Age of Hammer tabletop tokens",
+  "palettes": {
+    "stormcast": {
+      "words": "burnished gold and deep sapphire blue, white highlights",
+      "colors": [ "#D4A62A", "#F2D27A", "#1E3A7A", "#3E64B8", "#F4F1E8", "#2A2A2A" ]
+    },
+    "skaven": {
+      "words": "sickly warpstone green, rust brown and grimy bronze",
+      "colors": [ "#3F9E4D", "#8FE36A", "#6B4A2B", "#A8642E", "#7C6A3A", "#1F1A14" ]
+    },
+    "neutral": {
+      "words": "weathered steel grey and parchment",
+      "colors": [ "#8A8F98", "#C9CDD3", "#E8DCC0", "#5A4A38", "#2A2A2A" ]
+    }
+  },
+  // Faction id (data/factions) -> palette used for that faction's unit icons.
+  "categoryPalettes": {
+    "stormcast-eternals": "stormcast",
+    "skaven": "skaven"
+  },
+  "icon": {
+    "prompt": "{subject}, top-down tabletop token icon, bold readable silhouette, painted miniature style, {palette}, soft even lighting, centered, single subject, plain flat background",
+    "negativePrompt": "text, letters, watermark, logo, signature, frame, border, photo, blurry, multiple subjects, cropped",
+    "background": "#D0D0D0"
+  },
+  "sfx": {
+    "prompt": "{subject}, single short sound effect, clean recording, dark fantasy battle, no music, no speech",
+    "negativePrompt": "music, melody, speech, voice, singing, background noise, hiss, low quality"
+  }
+}

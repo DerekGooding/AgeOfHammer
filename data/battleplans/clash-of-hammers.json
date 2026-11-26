@@ -1,0 +1,28 @@
+{
+  // An original, simple battleplan for testing the engine. Coordinates are in inches; (0,0) is the top-left corner.
+  "id": "clash-of-hammers",
+  "name": "Clash of Hammers",
+  "width": 60,
+  "height": 44,
+  "battleRounds": 5,
+  "territories": [
+    { "x": 0, "y": 32, "w": 60, "h": 12 },
+    { "x": 0, "y": 0, "w": 60, "h": 12 }
+  ],
+  "objectives": [
+    { "x": 30, "y": 22 },
+    { "x": 12, "y": 22 },
+    { "x": 48, "y": 22 },
+    { "x": 30, "y": 38 },
+    { "x": 30, "y": 6 }
+  ],
+  "terrain": [
+    { "name": "Ruined Shrine", "area": { "x": 19, "y": 15, "w": 5, "h": 3 }, "impassable": true, "obscuring": true },
+    { "name": "Ruined Shrine", "area": { "x": 36, "y": 26, "w": 5, "h": 3 }, "impassable": true, "obscuring": true },
+    { "name": "Shattered Tower", "area": { "x": 3, "y": 14, "w": 4, "h": 4 }, "impassable": true, "obscuring": true },
+    { "name": "Shattered Tower", "area": { "x": 53, "y": 26, "w": 4, "h": 4 }, "impassable": true, "obscuring": true }
+  ],
+  "vpForOne": 1,
+  "vpForTwoPlus": 1,
+  "vpForMoreThanOpponent": 1
+}

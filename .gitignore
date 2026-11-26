@@ -480,3 +480,11 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Godot engine + editor data, downloaded by tools/get-godot.ps1 (portable, self-contained)
+tools/godot/
+
+# Godot project caches and generated files
+.godot/
+*.translation
+export_presets.cfg

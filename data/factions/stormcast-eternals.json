@@ -1,0 +1,103 @@
+{
+  // VERIFY: Wahapedia was unreachable when this file was written. Characteristics were entered from memory of the
+  // AoS 4th edition warscrolls and MUST be checked against https://wahapedia.ru/aos4/factions/stormcast-eternals/
+  // Set "verified": true on each warscroll once it matches Wahapedia. Abilities left empty still need transcribing.
+  "id": "stormcast-eternals",
+  "name": "Stormcast Eternals",
+  "grandAlliance": "Order",
+  "color": "#D4A62A",
+  "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/",
+  "verified": false,
+  "battleTraits": [],
+  "defaultArmy": [ "lord-imperatant", "knight-arcanum", "liberators", "vindictors", "prosecutors", "annihilators" ],
+  "warscrolls": [
+    {
+      "id": "lord-imperatant",
+      "name": "Lord-Imperatant",
+      "move": 5, "health": 7, "save": 3, "control": 2,
+      "baseSizeMm": 40, "unitSize": 1,
+      "keywords": [ "Order", "Stormcast Eternals", "Hero", "Infantry", "Warrior Chamber" ],
+      "weapons": [
+        { "name": "Stormstrike Glaive", "range": 0, "attacks": "4", "hit": 3, "wound": 3, "rend": 1, "damage": "2" },
+        { "name": "Gryph-hound's Beak and Claws", "range": 0, "attacks": "3", "hit": 4, "wound": 3, "rend": 0, "damage": "1", "abilities": [ "Companion" ] }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/Lord-Imperatant",
+      "verified": false
+    },
+    {
+      "id": "knight-arcanum",
+      "name": "Knight-Arcanum",
+      "move": 5, "health": 5, "save": 3, "control": 2,
+      "baseSizeMm": 40, "unitSize": 1, "wizardLevel": 1,
+      "keywords": [ "Order", "Stormcast Eternals", "Hero", "Wizard", "Infantry", "Sacrosanct Chamber" ],
+      "weapons": [
+        { "name": "Valedictor Stave", "range": 0, "attacks": "3", "hit": 3, "wound": 3, "rend": 1, "damage": "D3" }
+      ],
+      "abilities": [],
+      "spells": [],
+      "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/Knight-Arcanum",
+      "verified": false
+    },
+    {
+      "id": "liberators",
+      "name": "Liberators",
+      "move": 5, "health": 2, "save": 3, "control": 1,
+      "baseSizeMm": 40, "unitSize": 5,
+      "keywords": [ "Order", "Stormcast Eternals", "Infantry", "Champion", "Warrior Chamber", "Reinforcements" ],
+      "weapons": [
+        { "name": "Warhammer", "range": 0, "attacks": "2", "hit": 3, "wound": 3, "rend": 1, "damage": "1" }
+      ],
+      "abilities": [
+        {
+          "name": "Lay Low the Tyrants",
+          "timing": "Passive",
+          "text": "VERIFY: Add 1 to wound rolls for this unit's combat attacks that target a unit with a Health characteristic of 5 or more.",
+          "modifiers": [ { "stat": "Wound", "value": 1, "attackType": "Melee", "condition": "targetHealth5Plus" } ]
+        }
+      ],
+      "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/Liberators",
+      "verified": false
+    },
+    {
+      "id": "vindictors",
+      "name": "Vindictors",
+      "move": 5, "health": 2, "save": 3, "control": 1,
+      "baseSizeMm": 40, "unitSize": 5,
+      "keywords": [ "Order", "Stormcast Eternals", "Infantry", "Champion", "Warrior Chamber", "Reinforcements" ],
+      "weapons": [
+        { "name": "Stormspear", "range": 0, "attacks": "2", "hit": 3, "wound": 3, "rend": 1, "damage": "1", "abilities": [ "Anti-Charge (+1 Rend)" ] }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/Vindictors",
+      "verified": false
+    },
+    {
+      "id": "prosecutors",
+      "name": "Prosecutors",
+      "move": 12, "health": 3, "save": 4, "control": 1,
+      "baseSizeMm": 40, "unitSize": 3,
+      "keywords": [ "Order", "Stormcast Eternals", "Infantry", "Fly", "Champion", "Angelos" ],
+      "weapons": [
+        { "name": "Stormcall Javelin", "range": 18, "attacks": "1", "hit": 3, "wound": 3, "rend": 1, "damage": "D3" },
+        { "name": "Celestial Hammers", "range": 0, "attacks": "2", "hit": 3, "wound": 3, "rend": 1, "damage": "1" }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/Prosecutors",
+      "verified": false
+    },
+    {
+      "id": "annihilators",
+      "name": "Annihilators",
+      "move": 4, "health": 4, "save": 3, "control": 1,
+      "baseSizeMm": 50, "unitSize": 3,
+      "keywords": [ "Order", "Stormcast Eternals", "Infantry", "Champion", "Warrior Chamber" ],
+      "weapons": [
+        { "name": "Meteoric Hammer", "range": 0, "attacks": "3", "hit": 3, "wound": 3, "rend": 1, "damage": "2" }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/stormcast-eternals/Annihilators",
+      "verified": false
+    }
+  ]
+}

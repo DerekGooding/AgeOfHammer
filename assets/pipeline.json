@@ -1,0 +1,23 @@
+{
+  // Asset pipeline settings (assets/README.md). Backends must be listed in models.json with an approved or capped license.
+  "imageService": "http://127.0.0.1:8411",
+  "audioService": "http://127.0.0.1:8412",
+  "imageBackend": "procedural-image",
+  "audioBackend": "procedural-audio",
+  "outputRoot": "client/AgeOfHammer.Client/assets",
+  "icon": {
+    "size": 256,
+    "candidates": 4,
+    "steps": 30,
+    "guidance": 6.5
+  },
+  "sfx": {
+    "candidates": 6,
+    "variants": 3,
+    "durationSeconds": 1.5,
+    "steps": 100,
+    "guidance": 7.0,
+    "targetLufs": -16.0,
+    "maxPeakDb": -1.0
+  }
+}

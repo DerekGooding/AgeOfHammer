@@ -1,0 +1,96 @@
+{
+  // VERIFY: Wahapedia was unreachable when this file was written. Characteristics were entered from memory of the
+  // AoS 4th edition warscrolls and MUST be checked against https://wahapedia.ru/aos4/factions/skaven/
+  // Set "verified": true on each warscroll once it matches Wahapedia. Abilities left empty still need transcribing.
+  "id": "skaven",
+  "name": "Skaven",
+  "grandAlliance": "Chaos",
+  "color": "#3F9E4D",
+  "source": "https://wahapedia.ru/aos4/factions/skaven/",
+  "verified": false,
+  "battleTraits": [],
+  "defaultArmy": [ "clawlord-on-gnaw-beast", "grey-seer", "clanrats", "clanrats", "stormvermin", "rat-ogors", "ratling-warpblaster" ],
+  "warscrolls": [
+    {
+      "id": "clawlord-on-gnaw-beast",
+      "name": "Clawlord on Gnaw-beast",
+      "move": 10, "health": 9, "save": 4, "control": 2,
+      "baseSizeMm": 65, "unitSize": 1,
+      "keywords": [ "Chaos", "Skaven", "Hero", "Cavalry", "Verminus" ],
+      "weapons": [
+        { "name": "Warpforged Blade", "range": 0, "attacks": "5", "hit": 3, "wound": 3, "rend": 1, "damage": "2" },
+        { "name": "Gnaw-beast's Chisel Fangs", "range": 0, "attacks": "4", "hit": 4, "wound": 3, "rend": 1, "damage": "2", "abilities": [ "Companion" ] }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/skaven/Clawlord-on-Gnaw-beast",
+      "verified": false
+    },
+    {
+      "id": "grey-seer",
+      "name": "Grey Seer",
+      "move": 6, "health": 5, "save": 6, "control": 2,
+      "baseSizeMm": 32, "unitSize": 1, "wizardLevel": 2,
+      "keywords": [ "Chaos", "Skaven", "Hero", "Wizard", "Infantry", "Masterclan" ],
+      "weapons": [
+        { "name": "Warpstone Staff", "range": 0, "attacks": "3", "hit": 4, "wound": 4, "rend": 0, "damage": "D3" }
+      ],
+      "abilities": [],
+      "spells": [],
+      "source": "https://wahapedia.ru/aos4/factions/skaven/Grey-Seer",
+      "verified": false
+    },
+    {
+      "id": "clanrats",
+      "name": "Clanrats",
+      "move": 6, "health": 1, "save": 5, "control": 1,
+      "baseSizeMm": 25, "unitSize": 20,
+      "keywords": [ "Chaos", "Skaven", "Infantry", "Champion", "Verminus", "Reinforcements" ],
+      "weapons": [
+        { "name": "Rusty Blade", "range": 0, "attacks": "1", "hit": 4, "wound": 4, "rend": 0, "damage": "1" }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/skaven/Clanrats",
+      "verified": false
+    },
+    {
+      "id": "stormvermin",
+      "name": "Stormvermin",
+      "move": 6, "health": 1, "save": 4, "control": 1,
+      "baseSizeMm": 25, "unitSize": 10,
+      "keywords": [ "Chaos", "Skaven", "Infantry", "Champion", "Verminus", "Reinforcements" ],
+      "weapons": [
+        { "name": "Rusty Halberd", "range": 0, "attacks": "2", "hit": 4, "wound": 3, "rend": 1, "damage": "1" }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/skaven/Stormvermin",
+      "verified": false
+    },
+    {
+      "id": "rat-ogors",
+      "name": "Rat Ogors",
+      "move": 6, "health": 4, "save": 5, "control": 1,
+      "baseSizeMm": 50, "unitSize": 2,
+      "keywords": [ "Chaos", "Skaven", "Infantry", "Moulder" ],
+      "weapons": [
+        { "name": "Tearing Claws and Blades", "range": 0, "attacks": "4", "hit": 4, "wound": 3, "rend": 1, "damage": "2" }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/skaven/Rat-Ogors",
+      "verified": false
+    },
+    {
+      "id": "ratling-warpblaster",
+      "name": "Ratling Warpblaster",
+      "move": 6, "health": 5, "save": 5, "control": 1,
+      "baseSizeMm": 50, "unitSize": 1,
+      "keywords": [ "Chaos", "Skaven", "Infantry", "Skryre", "War Machine" ],
+      "weapons": [
+        { "name": "Ratling Warpblaster", "range": 12, "attacks": "2D6", "hit": 4, "wound": 3, "rend": 1, "damage": "1" },
+        { "name": "Rusty Knives", "range": 0, "attacks": "3", "hit": 5, "wound": 5, "rend": 0, "damage": "1" }
+      ],
+      "abilities": [],
+      "source": "https://wahapedia.ru/aos4/factions/skaven/Ratling-Warpblaster",
+      "verified": false
+    }
+  ]
+}

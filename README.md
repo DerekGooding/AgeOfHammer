@@ -1,0 +1,120 @@
+# Age of Hammer
+
+A playable 2D simulation of **Warhammer Age of Sigmar 4th edition**, written in C#. The frontend runs on Godot 4.7 (.NET) and the rules engine is a plain .NET library. Play against an AI, play hotseat with a friend, or watch two AIs fight.
+
+## Running
+
+You need the .NET 10 SDK. Godot is kept inside the repo (git-ignored), so download it once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/get-godot.ps1   # downloads Godot 4.7.2 .NET into tools/godot
+dotnet build                                                    # builds the engine, tests and the Godot client
+```
+
+Then:
+
+```powershell
+tools/godot.ps1 --path client/AgeOfHammer.Client                   # play
+tools/godot.ps1 --path client/AgeOfHammer.Client --watch           # watch AI vs AI
+tools/godot.ps1 -e --path client/AgeOfHammer.Client                # open the Godot editor
+tools/godot.ps1 --headless --path client/AgeOfHammer.Client --smoke  # play a full AI game headless; exit code 0 = OK
+dotnet test                                                        # rules engine tests
+```
+
+`--screenshot <file.png> --after <seconds>` saves the window to a PNG and quits. It's useful for checking UI changes without a person at the screen.
+
+**Controls:**
+
+| Input | Action |
+|---|---|
+| Left-click | Select a unit, place it, or pick a target |
+| Right-drag | Pan the camera |
+| Mouse wheel | Zoom |
+| Enter | End the current phase |
+| Esc / right-click | Cancel targeting |
+| Tab | Select the next unit |
+| R | Change the deployment formation |
+| F | Fit the board to the screen |
+| + / - | Change AI speed |
+| P | Pause the AI |
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `src/AgeOfHammer.Core` | The rules engine, written in pure C# with no MonoGame dependency. |
+| `client/AgeOfHammer.Client` | The Godot 4.7 C# frontend. `Scripts/` holds the screens (menu, army, battle), `BoardView` (battlefield drawing and mouse input) and `LabelLayer` (screen-space labels). The UI is built in code; `Main.tscn` is the only scene. |
+| `src/AgeOfHammer.Game` | The previous MonoGame frontend, superseded by the Godot client. |
+| `tools/get-godot.ps1`, `tools/godot.ps1` | Download and run the repo-local Godot install. |
+| `tools/AgeOfHammer.Balance` | A headless AI-vs-AI sweep, e.g. `dotnet run --project tools/AgeOfHammer.Balance -- --seeds 200 --details`. It reports win rates, VP and per-unit survival and damage. `--data <dir>` compares an edited copy of `data/`. |
+| `tools/AgeOfHammer.Assets`, `tools/asset-services`, `assets/` | The icon and sound pipeline: unit icons per warscroll and sounds per game event. See [assets/README.md](assets/README.md). |
+| `tests/AgeOfHammer.Core.Tests` | xUnit tests, including headless AI-vs-AI games with fixed seeds. |
+| `data/factions/*.json` | Warscrolls. Add a file here to add a faction. |
+| `data/battleplans/*.json` | Battlefield size, territories, objectives, terrain and scoring. |
+
+Inside `src/AgeOfHammer.Core`:
+
+| Folder | Contents |
+|---|---|
+| `Engine/` | `GameEngine`: deployment, battle rounds, phases, commands, reactions and scoring. |
+| `Combat/` | `AttackResolver`: the hit/wound/save/ward/damage sequence, crits, Anti-X and expected-damage maths. |
+| `AI/` | `AiPlayer`, a heuristic opponent. |
+
+Every change to the game state goes through `GameEngine.Submit(GameAction)`. The UI and the AI produce the same actions, so they can't diverge on the rules. `GameEngine.Decider` says whose decision it is. `GameEngine.Pending` describes any prompt the engine is waiting on: placing a move, All-out Defence, or a reaction.
+
+## Rules implemented (AoS 4th edition core rules)
+
+**Deployment and turn structure**
+- Players deploy alternately, wholly within their own territory. Whoever finishes deploying first takes the first turn.
+- From round 2, a priority roll decides who goes first.
+- Each player gets 4 CP per battle round, and the player behind on VP gets 1 extra.
+
+**Movement**
+- Normal move, Run (Move + D6) and Retreat (D3 mortal damage).
+- Models can't move through or end within 3" of an enemy (combat range).
+- Units must stay in coherency (each model within ½" of another).
+- Models can't overlap other models or cross impassable terrain. FLY units ignore terrain.
+
+**Shooting**
+- Targets must be visible and in range. Obscuring terrain blocks line of sight.
+- Units in combat can only use `Shoot in Combat` weapons.
+- Units that ran or retreated can't shoot.
+
+**Charges**
+- A charge is a 2D6" move that must end within ½" of an enemy unit.
+- Units that ran or retreated can't charge.
+
+**Combat**
+- Players alternate picking units to fight, starting with the active player.
+- Strike-first units fight first and strike-last units fight last.
+- Each unit piles in 3" before it attacks.
+
+**The attack sequence**
+- Hit and wound modifiers are capped at ±1. An unmodified 1 always fails and an unmodified 6 is a crit.
+- Weapon abilities: Crit (2 Hits / Auto-wound / Mortal), Charge (+1 Damage), Anti-X (+1 Rend) and Companion.
+- Save modifiers are capped at +1. Ward saves are rolled for each damage point.
+- Damage goes to already-damaged models first, and excess damage carries over to the next model.
+
+**Commands**
+- All-out Attack, All-out Defence, At the Double, Forward to Victory, Rally, Power Through.
+- Reactions: Redeploy, Covering Fire, Counter-charge.
+- Each command can be used once per phase, and each unit can receive one command per phase.
+
+**Spells**
+- Casting is 2D6 against the casting value. A double 1 is a miscast.
+- An enemy wizard within 30" attempts to unbind automatically.
+
+**Scoring**
+- Each objective is controlled by the player with the higher total Control within 3". On a tie, the current controller keeps it.
+- Victory points are scored at the end of each turn, as set in the battleplan.
+- The game ends after 5 battle rounds or when one army is wiped out.
+
+## ⚠️ Data needs verifying against Wahapedia
+
+Wahapedia was unreachable while this project was being built (the connection was reset). So the warscroll characteristics in `data/factions/*.json` were entered from memory, and every warscroll is marked `"verified": false`. Before relying on the numbers:
+
+1. Open each warscroll's `source` URL on Wahapedia.
+2. Correct the characteristics, weapons and base sizes, and add the abilities (most are still empty), battle traits and spells.
+3. Set `"verified": true`.
+
+Simple passive abilities can be expressed in data, for example `"modifiers": [{ "stat": "Wound", "value": 1, "attackType": "Melee", "condition": "targetHealth5Plus" }]`. Spells can use the `effect` types `mortal`, `heal` and `buff`. Abilities that need real logic still need code; `AbilityDef.ScriptId` is reserved for that.

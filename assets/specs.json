@@ -1,0 +1,41 @@
+{
+  // What to generate. Icon "source" is a warscroll id from data/factions; the faction picks the palette (style.json).
+  // Sound "source" is "event:<SoundEvent>" (tools/AgeOfHammer.Assets/AssetPlanner.cs) with a single "play" slot.
+  // Prompts describe the look generically; they deliberately avoid trademarked names.
+  "icons": [
+    { "source": "lord-imperatant", "prompt": "armoured knight commander in ornate gold plate with a long glaive and a winged hound companion" },
+    { "source": "knight-arcanum", "prompt": "armoured battle mage in gold plate holding a crackling lightning staff" },
+    { "source": "liberators", "prompt": "heavily armoured golden warrior with a warhammer and a tall shield" },
+    { "source": "vindictors", "prompt": "heavily armoured golden spearman braced behind a shield" },
+    { "source": "prosecutors", "prompt": "winged golden warrior hurling a lightning javelin" },
+    { "source": "annihilators", "prompt": "huge golden warrior in massive plate armour swinging a meteoric hammer" },
+    { "source": "clawlord-on-gnaw-beast", "prompt": "ratman warlord with a jagged blade riding a hulking fanged rodent beast" },
+    { "source": "grey-seer", "prompt": "hunched horned ratman sorcerer in tattered robes holding a glowing green stone staff" },
+    { "source": "clanrats", "prompt": "scrawny ratman warrior with a rusty blade and a battered round shield" },
+    { "source": "stormvermin", "prompt": "black-furred armoured ratman guard with a rusty halberd" },
+    { "source": "rat-ogors", "prompt": "massive mutated rat brute with claws and bolted-on blades" },
+    { "source": "ratling-warpblaster", "prompt": "ratman crew firing an oversized multi-barrelled green-glowing gun" }
+  ],
+  "sfx": [
+    { "source": "event:BattleRoundStart", "slots": { "play": "deep war drum roll ending in a single heavy hit" }, "durationSeconds": 2.5 },
+    { "source": "event:TurnStart", "slots": { "play": "short brass war horn call" }, "durationSeconds": 2.0 },
+    { "source": "event:Move", "slots": { "play": "armoured footsteps marching on dirt" } },
+    { "source": "event:Run", "slots": { "play": "fast running footsteps with clinking armour" } },
+    { "source": "event:ChargeDeclared", "slots": { "play": "fierce battle cry from a small group of warriors" } },
+    { "source": "event:ChargeSucceeded", "slots": { "play": "heavy crash of shields and bodies colliding" } },
+    { "source": "event:ChargeFailed", "slots": { "play": "warriors stumbling to a halt, gravel scuffing" } },
+    { "source": "event:RangedAttack", "slots": { "play": "volley of javelins whooshing through the air" } },
+    { "source": "event:MeleeAttack", "slots": { "play": "flurry of swords and hammers clashing on armour" } },
+    { "source": "event:SaveMade", "slots": { "play": "blade glancing off a metal shield with a bright ring" }, "durationSeconds": 1.0 },
+    { "source": "event:ModelSlain", "slots": { "play": "armour clattering as a body falls to the ground" } },
+    { "source": "event:UnitDestroyed", "slots": { "play": "several armoured bodies falling followed by silence" }, "durationSeconds": 2.0 },
+    { "source": "event:MortalDamage", "slots": { "play": "sharp magical crackle and impact" }, "durationSeconds": 1.0 },
+    { "source": "event:CommandUsed", "slots": { "play": "commander shouting a single sharp order" }, "durationSeconds": 1.0 },
+    { "source": "event:SpellCast", "slots": { "play": "rising arcane hum ending in a lightning crack" }, "durationSeconds": 2.0 },
+    { "source": "event:SpellUnbound", "slots": { "play": "magical energy fizzling out and dissipating" } },
+    { "source": "event:Miscast", "slots": { "play": "unstable magic exploding with a sickly backfire" } },
+    { "source": "event:ObjectiveCaptured", "slots": { "play": "banner planted into the ground with a solid thud" } },
+    { "source": "event:Victory", "slots": { "play": "triumphant brass fanfare stinger" }, "durationSeconds": 3.0 },
+    { "source": "event:Defeat", "slots": { "play": "low mournful horn fading away" }, "durationSeconds": 3.0 }
+  ]
+}

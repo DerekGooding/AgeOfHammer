@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/client/">
+    <Project Path="client/AgeOfHammer.Client/AgeOfHammer.Client.csproj">
+      <BuildType Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/AgeOfHammer.Core/AgeOfHammer.Core.csproj" />
+    <Project Path="src/AgeOfHammer.Game/AgeOfHammer.Game.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AgeOfHammer.Core.Tests/AgeOfHammer.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/AgeOfHammer.Assets/AgeOfHammer.Assets.csproj" />
+    <Project Path="tools/AgeOfHammer.Balance/AgeOfHammer.Balance.csproj" />
+  </Folder>
+</Solution>
