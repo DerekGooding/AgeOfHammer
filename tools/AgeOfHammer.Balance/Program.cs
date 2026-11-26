@@ -1,24 +1,22 @@
-using AgeOfHammer.Core.AI;
 using AgeOfHammer.Core.Data;
-using AgeOfHammer.Core.Dice;
-using AgeOfHammer.Core.Engine;
-using AgeOfHammer.Core.State;
+using AgeOfHammer.Core.Lab;
 
-// Headless balance sweep: plays AI vs AI battles across many seeds and reports win rates and unit performance.
+// Headless balance sweep: plays AI vs AI battles in parallel and reports win rates (95% confidence) and unit stats.
 //
-//   dotnet run --project tools/AgeOfHammer.Balance -- [options]
+//   dotnet run -c Release --project tools/AgeOfHammer.Balance -- [options]
 //
-//   --seeds <n>            games per pairing (default 200)
+//   --games <n>            number of games (default 1000; with side swapping, n/2 seeds each played both ways)
 //   --data <dir>           alternative data directory (e.g. an edited copy of data/) to compare balance changes
 //   --battleplan <id>      battleplan id (default: the first one)
-//   --p1 <faction>         player 1 faction id (default stormcast-eternals); --p2 likewise (default skaven)
-//   --army1 <ids>          comma-separated warscroll ids for player 1 (default: the faction's defaultArmy); --army2 likewise
-//   --no-swap              don't also play every pairing with the sides swapped (swapping cancels out territory bias)
-//   --details              per-warscroll damage dealt, damage taken and survival
+//   --p1 <faction>         army A faction id (default stormcast-eternals); --p2 likewise for army B (default skaven)
+//   --army1 <ids>          comma-separated warscroll ids for army A (default: the faction's defaultArmy); --army2 likewise
+//   --no-swap              don't swap sides (swapping cancels out any first-player or territory bias)
 //   --no-reserves          the AI never uses deep strike / tunnels (to measure their effect)
+//   --threads <n>          limit parallelism (default: all cores)
+//   --details              per-warscroll damage dealt, survival and damage per 100 points
 //   --coverage             how much of each faction's rules are automated (data/scripts), then exit
 
-int seeds = 200;
+int games = 1000, threads = -1;
 string? dataDir = null, planId = null, army1 = null, army2 = null;
 string p1 = "stormcast-eternals", p2 = "skaven";
 bool swap = true, details = false, coverage = false, reserves = true;
@@ -29,7 +27,8 @@ for (int i = 0; i < args.Length; i++)
     string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{arg} needs a value.");
     switch (arg)
     {
-        case "--seeds": seeds = int.Parse(Next()); break;
+        case "--games": games = int.Parse(Next()); break;
+        case "--seeds": games = int.Parse(Next()) * 2; break; // backwards compatible
         case "--data": dataDir = Next(); break;
         case "--battleplan": planId = Next(); break;
         case "--p1": p1 = Next(); break;
@@ -37,9 +36,10 @@ for (int i = 0; i < args.Length; i++)
         case "--army1": army1 = Next(); break;
         case "--army2": army2 = Next(); break;
         case "--no-swap": swap = false; break;
+        case "--no-reserves": reserves = false; break;
+        case "--threads": threads = int.Parse(Next()); break;
         case "--details": details = true; break;
         case "--coverage": coverage = true; break;
-        case "--no-reserves": reserves = false; break;
         default:
             Console.Error.WriteLine($"Unknown argument '{arg}'.");
             return 2;
@@ -75,26 +75,13 @@ if (coverage)
         foreach (var w in f.LoadWarnings) Console.WriteLine($"  warning: {w}");
     }
     return 0;
-
-    static string Frac(int n, int total) => total == 0 ? "-" : $"{n}/{total} ({100.0 * n / total:0}%)";
 }
 
-FactionData Faction(string id) => factions.FirstOrDefault(f => f.Id == id)
-    ?? throw new ArgumentException($"No faction '{id}'. Known: {string.Join(", ", factions.Select(f => f.Id))}");
-
-List<string> Army(FactionData f, string? csv) =>
-    csv is null ? f.DefaultArmy : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-
-FactionData fa, fb;
-List<string> armyA, armyB;
+ArmyList a, b;
 try
 {
-    fa = Faction(p1);
-    fb = Faction(p2);
-    armyA = Army(fa, army1);
-    armyB = Army(fb, army2);
-    foreach (var id in armyA) fa.Get(id);
-    foreach (var id in armyB) fb.Get(id);
+    a = Army(p1, army1);
+    b = Army(p2, army2);
 }
 catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
 {
@@ -103,103 +90,38 @@ catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
 }
 
 Console.WriteLine($"Battleplan: {plan.Name}   Data: {dataDir}");
-Console.WriteLine($"A = {fa.Name}: {string.Join(", ", armyA)}");
-Console.WriteLine($"B = {fb.Name}: {string.Join(", ", armyB)}");
+Console.WriteLine($"A = {a}: {string.Join(", ", a.Units)}");
+Console.WriteLine($"B = {b}: {string.Join(", ", b.Units)}");
+
+var settings = new MatchupSettings { Battleplan = plan, Games = games, SwapSides = swap, UseReserves = reserves, MaxParallelism = threads };
+var result = MatchupRunner.Run(a, b, settings);
+
 Console.WriteLine();
-
-var results = new List<GameResult>();
-var unitStats = new Dictionary<string, UnitStats>();
-int failures = 0;
-
-foreach (bool swapped in swap ? new[] { false, true } : [false])
-{
-    for (int seed = 1; seed <= seeds; seed++)
-    {
-        // Side 0 deploys in the bottom territory; swapping puts army A on top.
-        var (f0, a0, f1, a1) = swapped ? (fb, armyB, fa, armyA) : (fa, armyA, fb, armyB);
-        var engine = GameEngine.Create(plan, f0, a0, f1, a1, new SeededDiceRoller(seed));
-        var ai = new[] { new AiPlayer(0) { UseReserves = reserves }, new AiPlayer(1) { UseReserves = reserves } };
-        try
-        {
-            int guard = 0;
-            while (engine.State.Phase != Phase.GameOver)
-            {
-                if (++guard > 50_000) throw new InvalidOperationException("game did not finish");
-                ai[engine.Decider].Act(engine);
-            }
-        }
-        catch (Exception ex)
-        {
-            failures++;
-            Console.Error.WriteLine($"  seed {seed}{(swapped ? " (swapped)" : "")}: {ex.Message}");
-            continue;
-        }
-
-        var s = engine.State;
-        int sideA = swapped ? 1 : 0;
-        results.Add(new GameResult(
-            AWon: s.Winner == sideA, BWon: s.Winner == 1 - sideA, Draw: s.IsDraw,
-            VpA: s.Players[sideA].VictoryPoints, VpB: s.Players[1 - sideA].VictoryPoints,
-            Rounds: s.BattleRound, Wipeout: s.Log.Last().Contains("wiped out")));
-
-        if (details)
-            // Units with the same name can't be told apart in the log, so they're pooled per game.
-            foreach (var group in s.Units.GroupBy(u => (u.Owner, u.Name)))
-            {
-                string key = $"{(group.Key.Owner == sideA ? "A" : "B")} {group.Key.Name}";
-                var st = unitStats.TryGetValue(key, out var existing) ? existing : unitStats[key] = new UnitStats();
-                foreach (var u in group)
-                {
-                    st.Games++;
-                    st.Survived += u.IsDestroyed ? 0 : 1;
-                    st.WoundsLostFraction += 1 - u.WoundsRemaining / (double)(u.Warscroll.Health * u.Models.Count);
-                }
-                // (In a mirror match both sides' units share names, so damage dealt is pooled across sides.)
-                st.DamageDealt += s.Log.Where(l => l.StartsWith(group.Key.Name + " attacks ")).Sum(DamageFromLog);
-            }
-    }
-}
-
-int n = results.Count;
-if (n == 0)
-{
-    Console.Error.WriteLine("No games finished.");
-    return 1;
-}
-
-Console.WriteLine($"{n} games{(swap ? " (half with sides swapped)" : "")}{(failures > 0 ? $", {failures} FAILED" : "")}");
-Console.WriteLine($"  {fa.Name,-22} wins {Pct(results.Count(r => r.AWon), n)}   avg VP {results.Average(r => r.VpA):0.0}");
-Console.WriteLine($"  {fb.Name,-22} wins {Pct(results.Count(r => r.BWon), n)}   avg VP {results.Average(r => r.VpB):0.0}");
-Console.WriteLine($"  Draws {Pct(results.Count(r => r.Draw), n)}   wipeouts {Pct(results.Count(r => r.Wipeout), n)}   avg rounds {results.Average(r => r.Rounds):0.0}");
+Console.WriteLine($"{result.N} games in {result.Elapsed.TotalSeconds:0.0}s{(swap ? " (half with sides swapped)" : "")}" +
+                  (result.Failures > 0 ? $", {result.Failures} FAILED" : ""));
+Console.WriteLine($"  {a.Faction.Name,-22} wins {result.WinA}   avg VP {result.AvgVpA:0.0}");
+Console.WriteLine($"  {b.Faction.Name,-22} wins {result.WinB}   avg VP {result.AvgVpB:0.0}");
+Console.WriteLine($"  Draws {result.Draw.Value:P1}   wipeouts {result.Wipeouts.Value:P1}   avg rounds {result.AvgRounds:0.0}");
+foreach (var g in result.Games.Where(g => g.Error != null).Take(5))
+    Console.Error.WriteLine($"  seed {g.Seed}{(g.Swapped ? " (swapped)" : "")}: {g.Error}");
 
 if (details)
 {
     Console.WriteLine();
-    Console.WriteLine($"  {"Unit",-34} {"survived",9} {"wounds lost",12} {"dmg dealt/game",15}");
-    foreach (var (key, st) in unitStats.OrderBy(k => k.Key))
-        Console.WriteLine($"  {key,-34} {Pct(st.Survived, st.Games),9} {st.WoundsLostFraction / st.Games,12:P0} {st.DamageDealt / (double)st.Games,15:0.0}");
-    Console.WriteLine("  (several units of the same warscroll are pooled)");
+    Console.WriteLine($"  {"Unit",-36} {"pts",4} {"survived",9} {"dmg/game",9} {"dmg/100pts",11} {"taken/game",11}");
+    foreach (var u in result.Units)
+        Console.WriteLine($"  {u.Side} {u.Name,-34} {u.Points,4} {u.SurvivalRate,9:P0} {u.DamagePerGame,9:0.0} {u.DamagePer100Points,11:0.0} {u.DamageTaken / Math.Max(1, u.Instances),11:0.0}");
 }
 
-return failures > 0 ? 1 : 0;
+return result.Failures > 0 ? 1 : 0;
 
-static string Pct(int count, int total) => $"{100.0 * count / total,5:0.0}%";
-
-// Attack summaries end with ". <n> damage, <m> slain".
-static int DamageFromLog(string line)
+ArmyList Army(string factionId, string? csv)
 {
-    int idx = line.LastIndexOf(" damage, ", StringComparison.Ordinal);
-    if (idx < 0) return 0;
-    int start = line.LastIndexOf(' ', idx - 1) + 1;
-    return int.TryParse(line[start..idx], out var dmg) ? dmg : 0;
+    var f = factions.FirstOrDefault(x => x.Id == factionId)
+            ?? throw new ArgumentException($"No faction '{factionId}'. Known: {string.Join(", ", factions.Select(x => x.Id))}");
+    var units = csv is null ? f.DefaultArmy : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    foreach (var id in units) f.Get(id);
+    return new ArmyList(f, units);
 }
 
-internal sealed record GameResult(bool AWon, bool BWon, bool Draw, int VpA, int VpB, int Rounds, bool Wipeout);
-
-internal sealed class UnitStats
-{
-    public int Games;
-    public int Survived;
-    public double WoundsLostFraction;
-    public int DamageDealt;
-}
+static string Frac(int n, int total) => total == 0 ? "-" : $"{n}/{total} ({100.0 * n / total:0}%)";

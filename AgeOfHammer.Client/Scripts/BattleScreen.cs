@@ -1,4 +1,6 @@
 using AgeOfHammer.Core.AI;
+using AgeOfHammer.Core.Data;
+using AgeOfHammer.Core.Lab;
 using AgeOfHammer.Core.Dice;
 using AgeOfHammer.Core.Engine;
 using AgeOfHammer.Core.Geometry;
@@ -22,6 +24,8 @@ public partial class BattleScreen : Node
     public const int TopBarHeight = 40;
 
     public Main App { get; set; } = null!;
+    /// <summary>When set, replays a lab game exactly (same seed and AI) instead of starting a new game.</summary>
+    public LabReplay? Replay { get; set; }
     public GameEngine Engine { get; private set; } = null!;
     public GameState S => Engine.State;
     public Color[] Colors { get; } = new Color[2];
@@ -71,23 +75,43 @@ public partial class BattleScreen : Node
     public override void _Ready()
     {
         var setup = App.Setup;
-        var f0 = App.Factions[setup.FactionIndex[0]];
-        var f1 = App.Factions[setup.FactionIndex[1]];
-        Engine = GameEngine.Create(App.Battleplans[setup.BattleplanIndex], f0, setup.Armies[0], f1, setup.Armies[1],
-            new SeededDiceRoller(System.Environment.TickCount));
+        FactionData f0, f1;
+        if (Replay is { } r)
+        {
+            var (engine, ais) = MatchupRunner.CreateGame(r.A, r.B, r.Settings, r.Seed, r.Swapped);
+            Engine = engine;
+            _ai[0] = ais[0];
+            _ai[1] = ais[1];
+            f0 = engine.State.Players[0].Faction;
+            f1 = engine.State.Players[1].Faction;
+            int sideA = r.Swapped ? 1 : 0;
+            S.Players[sideA].Name += " (A)";
+            S.Players[1 - sideA].Name += " (B)";
+        }
+        else
+        {
+            f0 = App.Factions[setup.FactionIndex[0]];
+            f1 = App.Factions[setup.FactionIndex[1]];
+            Engine = GameEngine.Create(App.Battleplans[setup.BattleplanIndex], f0, setup.Armies[0], f1, setup.Armies[1],
+                new SeededDiceRoller(System.Environment.TickCount));
+        }
         Colors[0] = Palette.Faction(f0.Color, Godot.Colors.SteelBlue);
         Colors[1] = Palette.Faction(f1.Color, Godot.Colors.IndianRed);
         if (f0.Id == f1.Id)
         {
-            S.Players[0].Name += " (P1)";
-            S.Players[1].Name += " (P2)";
+            if (Replay == null)
+            {
+                S.Players[0].Name += " (P1)";
+                S.Players[1].Name += " (P2)";
+            }
             Colors[1] = Color.Color8(200, 70, 70);
         }
-        for (int p = 0; p < 2; p++)
-        {
-            if (setup.IsAi[p]) _ai[p] = new AiPlayer(p);
-            else if (setup.IsAi[1 - p]) S.Players[p].Name += " (You)";
-        }
+        if (Replay == null)
+            for (int p = 0; p < 2; p++)
+            {
+                if (setup.IsAi[p]) _ai[p] = new AiPlayer(p);
+                else if (setup.IsAi[1 - p]) S.Players[p].Name += " (You)";
+            }
 
         Board = new BoardView { Screen = this };
         AddChild(Board);
@@ -800,7 +824,10 @@ public partial class BattleScreen : Node
         var vp = Ui.Label($"Victory points {S.Players[0].VictoryPoints} - {S.Players[1].VictoryPoints}");
         vp.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(vp);
-        col.AddChild(Ui.Row(16, Ui.Button("Main menu", App.ShowMenu, minWidth: 180), Ui.Button("Rematch", App.ShowBattle, minWidth: 180)));
+        if (Replay != null)
+            col.AddChild(Ui.Row(16, Ui.Button("Back to lab", App.ShowLab, minWidth: 180), Ui.Button("Watch again", () => App.ShowReplay(Replay), minWidth: 180)));
+        else
+            col.AddChild(Ui.Row(16, Ui.Button("Main menu", App.ShowMenu, minWidth: 180), Ui.Button("Rematch", App.ShowBattle, minWidth: 180)));
         _hudLayer.AddChild(_gameOver);
         _gameOver.ResetSize();
         var size = GetViewport().GetVisibleRect().Size;

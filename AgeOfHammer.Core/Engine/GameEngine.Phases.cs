@@ -534,7 +534,7 @@ public sealed partial class GameEngine
         if (unit.Owner != pt.Player || !CanPowerThrough(unit) || !PowerThroughTargets(unit).Contains(target))
             return ActionResult.Fail("Cannot Power Through.");
         PayCommand(pt.Player, Commands.PowerThrough, unit);
-        AttackResolver.InflictMortal(State, target, State.Dice.D3(), $"{unit.Name} powers through");
+        AttackResolver.InflictMortal(State, target, State.Dice.D3(), $"{unit.Name} powers through", unit);
         CheckWipeout();
         return ActionResult.Success;
     }

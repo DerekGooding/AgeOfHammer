@@ -26,6 +26,7 @@ public partial class Main : Node
     public List<FactionData> Factions { get; private set; } = new();
     public List<Battleplan> Battleplans { get; private set; } = new();
     public MatchSetup Setup { get; } = new();
+    public LabState Lab { get; } = new();
     public string? LoadError { get; private set; }
     public bool SmokeTest { get; private set; }
 
@@ -79,6 +80,12 @@ public partial class Main : Node
 
         if (LoadError == null && args.Contains("--army-screen"))
             ShowArmy(0);
+        else if (LoadError == null && args.Contains("--lab"))
+        {
+            if (args.Contains("--efficiency")) { Lab.Tab = "efficiency"; Lab.SelectedWarscroll = "vanquishers"; }
+            ShowLab();
+            if (args.Contains("--run")) CallDeferred(nameof(RunLabForScreenshot));
+        }
         else if (LoadError == null && (args.Contains("--watch") || SmokeTest))
         {
             Setup.IsAi[0] = Setup.IsAi[1] = true;
@@ -94,8 +101,17 @@ public partial class Main : Node
     }
 
     public void ShowMenu() => Show(new MenuScreen { App = this });
-    public void ShowArmy(int player) => Show(new ArmyScreen { App = this, Player = player });
+    public void ShowArmy(int player) => ShowArmy(player, ShowMenu);
+    public void ShowArmy(int player, Action back) => Show(new ArmyScreen { App = this, Player = player, Back = back });
     public void ShowBattle() => Show(new BattleScreen { App = this });
+    public void ShowLab() => Show(new LabScreen { App = this });
+    public void ShowReplay(LabReplay replay) => Show(new BattleScreen { App = this, Replay = replay });
+
+    /// <summary>--lab --run: start a matchup straight away (for screenshots and smoke tests).</summary>
+    private void RunLabForScreenshot()
+    {
+        if (_screen is LabScreen lab) lab.Call("StartRunFromCommandLine");
+    }
 
     private void Show(Node screen)
     {

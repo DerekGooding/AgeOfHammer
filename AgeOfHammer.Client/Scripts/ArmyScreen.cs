@@ -10,6 +10,8 @@ public partial class ArmyScreen : Control
 
     public Main App { get; set; } = null!;
     public int Player { get; set; }
+    /// <summary>Where "Done" and Escape go (the menu or the lab).</summary>
+    public Action? Back { get; set; }
     private MarginContainer _root = null!;
     private float _leftScroll, _rightScroll;
 
@@ -25,7 +27,7 @@ public partial class ArmyScreen : Control
 
     public override void _UnhandledKeyInput(InputEvent e)
     {
-        if (e is InputEventKey { Pressed: true, Keycode: Key.Escape }) App.ShowMenu();
+        if (e is InputEventKey { Pressed: true, Keycode: Key.Escape }) (Back ?? App.ShowMenu)();
     }
 
     private void Build()
@@ -71,7 +73,7 @@ public partial class ArmyScreen : Control
         page.AddChild(Ui.Row(12,
             Ui.Button("Reset to default", () => { App.ResetArmy(Player); Build(); }, minWidth: 200),
             Ui.Button("Clear", () => { army.Clear(); Build(); }, minWidth: 120),
-            Ui.Button("Done", App.ShowMenu, minWidth: 200)));
+            Ui.Button("Done", () => { App.Lab.Result = null; (Back ?? App.ShowMenu)(); }, minWidth: 200)));
 
         // Keep the scroll positions across rebuilds.
         Callable.From(() =>

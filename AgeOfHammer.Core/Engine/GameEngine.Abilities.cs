@@ -265,14 +265,14 @@ public sealed partial class GameEngine
         switch (effect.Type)
         {
             case "mortal":
-                AttackResolver.InflictMortal(State, recipient, Amount(), name);
+                AttackResolver.InflictMortal(State, recipient, Amount(), name, source);
                 break;
             case "mortalPerModel":
             {
                 int threshold = Math.Max(2, effect.Threshold);
                 int hits = 0;
                 for (int i = 0; i < recipient.AliveCount; i++) if (State.Dice.D6() >= threshold) hits++;
-                if (hits > 0) AttackResolver.InflictMortal(State, recipient, hits, name);
+                if (hits > 0) AttackResolver.InflictMortal(State, recipient, hits, name, source);
                 else State.Write($"  {name}: no damage to {recipient.Name}.");
                 break;
             }
@@ -280,7 +280,7 @@ public sealed partial class GameEngine
             {
                 int count = Amount(), threshold = Math.Max(2, effect.Threshold), hits = 0;
                 for (int i = 0; i < count; i++) if (State.Dice.D6() >= threshold) hits++;
-                if (hits > 0) AttackResolver.InflictMortal(State, recipient, hits, name);
+                if (hits > 0) AttackResolver.InflictMortal(State, recipient, hits, name, source);
                 else State.Write($"  {name}: no damage to {recipient.Name}.");
                 break;
             }
@@ -292,8 +292,10 @@ public sealed partial class GameEngine
                 for (int i = 0; i < dice; i++)
                     if (State.Dice.D6() >= need && recipient.Alive.FirstOrDefault() is { } model)
                     {
+                        int left = recipient.Warscroll.Health - model.Damage;
                         model.Slain = true;
                         slain++;
+                        State.RecordDamage(source, recipient, left, 1);
                     }
                 State.Write($"  {name}: {slain} model(s) slain in {recipient.Name}" + (recipient.IsDestroyed ? $" - {recipient.Name} DESTROYED" : ""));
                 break;

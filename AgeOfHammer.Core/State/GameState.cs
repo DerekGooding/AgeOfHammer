@@ -157,6 +157,14 @@ public sealed class Objective
     public int ControlledBy { get; set; } = -1;
 }
 
+/// <summary>What a unit did and suffered during a game (for the list lab).</summary>
+public sealed class UnitStats
+{
+    public int DamageDealt { get; set; }
+    public int ModelsSlain { get; set; }
+    public int DamageTaken { get; set; }
+}
+
 /// <summary>A placed battlefield marker (e.g. a Gnawhole).</summary>
 public sealed class Marker
 {
@@ -185,6 +193,25 @@ public sealed class GameState
     public bool SecondTurnOfRound { get; set; }
     public int? Winner { get; set; }
     public bool IsDraw { get; set; }
+
+    /// <summary>Per-unit statistics, keyed by unit id.</summary>
+    public Dictionary<int, UnitStats> Stats { get; } = new();
+
+    public UnitStats StatsOf(Unit unit)
+    {
+        if (!Stats.TryGetValue(unit.Id, out var s)) Stats[unit.Id] = s = new UnitStats();
+        return s;
+    }
+
+    /// <summary>Records damage done by <paramref name="by"/> (may be null, e.g. retreating) to <paramref name="target"/>.</summary>
+    public void RecordDamage(Unit? by, Unit target, int damage, int slain)
+    {
+        StatsOf(target).DamageTaken += damage;
+        if (by == null || by.Owner == target.Owner) return;
+        var s = StatsOf(by);
+        s.DamageDealt += damage;
+        s.ModelsSlain += slain;
+    }
 
     /// <summary>Keys of abilities already used, for once-per-phase/turn/round/battle limits.</summary>
     public HashSet<string> UsedAbilities { get; } = new();

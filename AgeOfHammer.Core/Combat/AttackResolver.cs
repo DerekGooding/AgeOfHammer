@@ -202,6 +202,7 @@ public static class AttackResolver
         result.WardSaved = warded;
         result.DamageInflicted = inflicted;
         result.ModelsSlain = slain;
+        s.RecordDamage(attacker, target, inflicted, slain);
 
         // The target's retaliation triggers, resolved after the attacks.
         int reflect = 0;
@@ -214,7 +215,11 @@ public static class AttackResolver
         if (anyMelee && slain > 0 && Modifiers.Find(s, target, Stat.SlainMortalOn, AttackType.Melee, attacker).Select(x => x.Modifier.Value).DefaultIfEmpty(0).Max() is int on and > 0)
             for (int i = 0; i < slain; i++) if (dice.D6() >= on) reflect++;
         if (reflect > 0 && attacker.OnBattlefield)
-            result.Reflected = ApplyDamage(s, attacker, reflect).Inflicted;
+        {
+            var (back, _, backSlain) = ApplyDamage(s, attacker, reflect);
+            result.Reflected = back;
+            s.RecordDamage(target, attacker, back, backSlain);
+        }
         return result;
     }
 
@@ -250,9 +255,11 @@ public static class AttackResolver
     }
 
     /// <summary>Inflicts mortal damage (no hit/wound/save, ward still applies) and logs it.</summary>
-    public static int InflictMortal(GameState s, Unit target, int amount, string source)
+    /// <param name="by">The unit responsible, for statistics (null for self-inflicted damage such as retreating).</param>
+    public static int InflictMortal(GameState s, Unit target, int amount, string source, Unit? by = null)
     {
         var (inflicted, warded, slain) = ApplyDamage(s, target, amount);
+        s.RecordDamage(by, target, inflicted, slain);
         s.Write($"{source}: {amount} mortal damage to {target.Name}" + (warded > 0 ? $" ({warded} warded)" : "") +
                 $", {slain} slain" + (target.IsDestroyed ? $" - {target.Name} DESTROYED" : ""));
         return inflicted;

@@ -56,7 +56,11 @@ public partial class MenuScreen : Control
         var start = Ui.Button("START BATTLE", App.ShowBattle, setup.Armies[0].Count > 0 && setup.Armies[1].Count > 0, minWidth: 280);
         start.CustomMinimumSize = new Vector2(280, 48);
         start.AddThemeFontSizeOverride("font_size", 18);
-        _content.AddChild(Centered(start));
+        var lab = Ui.Button("LIST LAB", App.ShowLab, minWidth: 280,
+            tooltip: "Simulate thousands of AI-vs-AI games between two lists, and compare units' efficiency per 100 points.");
+        lab.CustomMinimumSize = new Vector2(280, 48);
+        lab.AddThemeFontSizeOverride("font_size", 18);
+        _content.AddChild(Centered(Ui.Row(16, start, lab)));
 
         foreach (var line in new[]
                  {
