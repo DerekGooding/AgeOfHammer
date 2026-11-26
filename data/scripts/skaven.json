@@ -1,10 +1,14 @@
 {
   // Skaven ability scripts. Applied on load to data/factions/skaven.json (see data/scripts/README.md).
-  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): tunnels/Gnawholes/reserves,
+  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): Warp-Grinder's Tunnel Skulkers,
   // tokens (Bomb Rats), Hidden Weapon Team visibility, re-rolls, results tables (Peal of Doom, Too Horrible to Die),
   // extra FIGHT activations, move-and-strike abilities (Rolling Doom, Smoke Bombs).
   "abilities": {
     // ----- Battle traits
+    "The Lurking Vermintide": { "reserve": { "pool": "tunnels below", "declare": true } },
+    "Gnawhole Ambush": { "reserve": { "pool": "tunnels below", "arrive": { "minEnemyDistance": 9, "marker": "Gnawhole", "markerRange": 6 } } },
+    "Splinters Of The Vermindoom": { "marker": { "name": "Gnawhole", "minEnemyDistance": 9, "minObjectiveDistance": 3, "minTerrainDistance": 1, "radius": 1.5 } },
+    "Grinderfist Tunnellers": { "reserve": { "pool": "tunnels below", "arrive": { "minEnemyDistance": 9 } } },
     "Too Quick To Hit-Hit": { "modifiers": [ { "stat": "NoRetreatDamage", "value": 1, "condition": "keywordAny:INFANTRY|CAVALRY" } ] },
 
     // ----- Passive modifiers

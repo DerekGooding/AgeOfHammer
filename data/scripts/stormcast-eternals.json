@@ -1,10 +1,12 @@
 {
   // Stormcast Eternals ability scripts. Applied on load to data/factions/stormcast-eternals.json (see data/scripts/README.md).
   // "abilities" entries apply to every ability with that name; "warscrolls" entries to one warscroll.
-  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): deep strike / Scions of the Storm,
-  // tokens, extra FIGHT activations, Ruination Chamber reactions, re-rolls, move-and-redeploy abilities.
+  // APPROX = simplified, documented in a comment. Not yet scriptable (left as text): Heavens-Sent, tokens, extra FIGHT
+  // activations, Ruination Chamber reactions, re-rolls, move-and-redeploy abilities.
   "abilities": {
     // ----- Battle traits
+    "The Celestial Realm": { "reserve": { "pool": "Celestial Realm", "declare": true } },
+    "Scions Of The Storm": { "reserve": { "pool": "Celestial Realm", "arrive": { "minEnemyDistance": 9 } } },
     "Their Finest Hour": {
       "activate": { "target": "friendly", "targetKeywords": ["STORMCAST ETERNALS"],
         "effects": [
@@ -45,6 +47,10 @@
     "The Prime Huntress": { "modifiers": [ { "stat": "Damage", "multiply": 2, "weapon": "Thengavar", "condition": "targetKeyword:MONSTER" } ] },
 
     // ----- Activated abilities
+    "Blazing Impact": {
+      "activate": { "target": "enemy", "range": 10, "maxTargets": 3, "requires": "setUpThisTurn", "roll": "D3", "success": 2, "perTarget": true,
+        "effects": [ { "type": "mortal", "amount": "roll" } ] }
+    },
     "Brace For Impact": {
       "activate": { "target": "enemy", "inCombat": true, "targetRequires": "targetCharged",
         "roll": "D6", "rollCount": "models", "success": 6,

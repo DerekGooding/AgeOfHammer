@@ -15,11 +15,13 @@ using AgeOfHammer.Core.State;
 //   --army1 <ids>          comma-separated warscroll ids for player 1 (default: the faction's defaultArmy); --army2 likewise
 //   --no-swap              don't also play every pairing with the sides swapped (swapping cancels out territory bias)
 //   --details              per-warscroll damage dealt, damage taken and survival
+//   --no-reserves          the AI never uses deep strike / tunnels (to measure their effect)
+//   --coverage             how much of each faction's rules are automated (data/scripts), then exit
 
 int seeds = 200;
 string? dataDir = null, planId = null, army1 = null, army2 = null;
 string p1 = "stormcast-eternals", p2 = "skaven";
-bool swap = true, details = false, coverage = false;
+bool swap = true, details = false, coverage = false, reserves = true;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -37,6 +39,7 @@ for (int i = 0; i < args.Length; i++)
         case "--no-swap": swap = false; break;
         case "--details": details = true; break;
         case "--coverage": coverage = true; break;
+        case "--no-reserves": reserves = false; break;
         default:
             Console.Error.WriteLine($"Unknown argument '{arg}'.");
             return 2;
@@ -115,7 +118,7 @@ foreach (bool swapped in swap ? new[] { false, true } : [false])
         // Side 0 deploys in the bottom territory; swapping puts army A on top.
         var (f0, a0, f1, a1) = swapped ? (fb, armyB, fa, armyA) : (fa, armyA, fb, armyB);
         var engine = GameEngine.Create(plan, f0, a0, f1, a1, new SeededDiceRoller(seed));
-        var ai = new[] { new AiPlayer(0), new AiPlayer(1) };
+        var ai = new[] { new AiPlayer(0) { UseReserves = reserves }, new AiPlayer(1) { UseReserves = reserves } };
         try
         {
             int guard = 0;

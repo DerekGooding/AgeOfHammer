@@ -103,10 +103,47 @@ These are also used by spells (`"effect"` plus `"effects"`).
 
 Any effect can include `"to": "self"` to apply to the user instead of the target.
 
+## Reserves: `"reserve": { ... }`
+
+Deep strike, tunnels and similar rules are defined per pool:
+
+```jsonc
+"The Celestial Realm": { "reserve": { "pool": "Celestial Realm", "declare": true } },                // deployment: may go into the pool
+"Scions Of The Storm": { "reserve": { "pool": "Celestial Realm", "arrive": { "minEnemyDistance": 9 } } },
+"Gnawhole Ambush":     { "reserve": { "pool": "tunnels below",
+                         "arrive": { "minEnemyDistance": 9, "marker": "Gnawhole", "markerRange": 6 } } }  // wholly within 6" of a friendly Gnawhole
+```
+
+**Declare fields:**
+- `keywords`: only units with all of these keywords may enter the pool.
+
+**Arrive fields:**
+- `minEnemyDistance`: how far every model must be from all enemy units.
+- `marker` and `markerRange`: every model must be wholly within that range of a friendly marker with that name.
+- `fromRound`: the first battle round units can arrive. The default is 2.
+
+**Core rules applied by the engine** (taken from memory of the AoS4 core rules; check them against the rulebook):
+- At most half of an army's units can start in reserve.
+- Units can't arrive in battle round 1.
+- Arriving uses the unit's move for that phase.
+- Units still in reserve at the start of battle round 4 are destroyed.
+
+An arriving unit counts as "set up this turn", so the `setUpThisTurn` and `targetSetUpThisTurn` conditions apply (e.g. Blazing Impact).
+
+## Markers: `"marker": { ... }`
+
+Placeable battlefield markers, such as Skaven Gnawholes:
+
+```jsonc
+"Splinters Of The Vermindoom": { "marker": { "name": "Gnawhole", "minEnemyDistance": 9, "minObjectiveDistance": 3,
+                                             "minTerrainDistance": 1, "radius": 1.5 } }
+```
+
+If the ability's timing is "Start of Battle Round", the player is asked to place one marker each battle round. The engine checks the distance limits.
+
 ## Not yet scriptable
 
 These still need engine support and stay as text for now:
-- deep strike and reserves (Scions of the Storm, tunnels, Gnawholes)
 - tokens
 - extra fight activations
 - reactions such as Ruination Chamber or "after a save roll of 6"

@@ -20,6 +20,9 @@ public sealed class AiPlayer
 
     public AiPlayer(int player) => Player = player;
 
+    /// <summary>Whether the AI puts units into reserve (deep strike, tunnels) during deployment.</summary>
+    public bool UseReserves { get; set; } = true;
+
     /// <summary>Takes one action if it is this AI's decision. Returns true if it acted.</summary>
     public bool Act(GameEngine engine)
     {
@@ -56,6 +59,8 @@ public sealed class AiPlayer
             case PendingReaction pr: return DecideReaction(e, pr);
             case PendingMove pm: return DecideMove(e, pm);
             case PendingAbilityWindow: return TryAbility(e) ?? new DoneAbilities(Player);
+            case PendingMarker pmk:
+                return new PlaceMarker(Player, Placement.FindMarkerSpot(e, Player, pmk.Def, ForwardObjective(e)));
         }
 
         if (s.Phase != Phase.Deployment && TryAbility(e) is { } ability) return ability;
@@ -215,9 +220,32 @@ public sealed class AiPlayer
 
     // ---------------------------------------------------------------- phases
 
+    /// <summary>The objective the AI most wants to push towards: not ours, closest to the enemy's units.</summary>
+    private Vector2 ForwardObjective(GameEngine e)
+    {
+        var s = e.State;
+        var enemies = s.LiveUnitsOf(1 - Player).ToList();
+        var objectives = s.Objectives.Where(o => o.ControlledBy != Player).DefaultIfEmpty(s.Objectives.FirstOrDefault()).Where(o => o != null).ToList();
+        if (objectives.Count == 0) return s.Bounds.Center;
+        if (enemies.Count == 0) return objectives[0]!.Position;
+        return objectives.OrderBy(o => enemies.Min(en => Vector2.Distance(en.Centroid, o!.Position))).First()!.Position;
+    }
+
     private GameAction Deploy(GameEngine e)
     {
         var s = e.State;
+        // Deep strike: keep slow, hard-hitting melee units in reserve (fast units gain little and miss round-1 objectives).
+        // One unit for small armies, two for larger ones.
+        int wanted = s.UnitsOf(Player).Count() >= 8 ? 2 : 1;
+        var reserveCandidate = s.UnitsOf(Player)
+            .Where(u => !u.Deployed && !u.Warscroll.IsHero && !u.Warscroll.RangedWeapons.Any()
+                        && u.Warscroll.Move <= 6 && u.Warscroll.Points >= 100)
+            .Select(u => (u, pool: e.ReservePools(u).FirstOrDefault()))
+            .Where(x => x.pool != null && e.CanDeployInReserve(x.u, x.pool))
+            .OrderByDescending(x => x.u.Warscroll.Points).FirstOrDefault();
+        if (UseReserves && reserveCandidate.u != null && e.ReservedCount(Player) < Math.Min(wanted, e.ReserveLimit(Player)))
+            return new DeployInReserve(Player, reserveCandidate.u.Id, reserveCandidate.pool!);
+
         var unit = s.UnitsOf(Player).First(u => !u.Deployed);
         int index = s.UnitsOf(Player).ToList().IndexOf(unit);
         int count = s.UnitsOf(Player).Count();
@@ -281,6 +309,14 @@ public sealed class AiPlayer
     private GameAction Movement(GameEngine e)
     {
         var s = e.State;
+        // Bring reserves in as soon as allowed, near the objective we want.
+        foreach (var r in e.ArrivableUnits(Player).ToList())
+        {
+            if (_handled.Contains(r.Id)) continue;
+            _handled.Add(r.Id);
+            var pos = Placement.FindArrival(e, r, ForwardObjective(e));
+            if (pos != null) return new ArriveFromReserve(Player, r.Id, pos);
+        }
         foreach (var u in Mine(e).ToList())
         {
             _handled.Add(u.Id);

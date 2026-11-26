@@ -15,7 +15,7 @@ public readonly record struct RectF(float X, float Y, float W, float H)
 }
 
 /// <summary>Measurement helpers. All units are inches; models are circles (base radius).</summary>
-public static class Geo
+public static partial class Geo
 {
     public const float CombatRange = 3f;
     public const float CoherencyRange = 0.5f;

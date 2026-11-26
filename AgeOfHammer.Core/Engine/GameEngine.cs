@@ -93,6 +93,7 @@ public sealed partial class GameEngine
                     AdvancePhase();
                     return ActionResult.Success;
                 case (PendingAbilityWindow, UseAbility ua): return DoUseAbility(ua);
+                case (PendingMarker pmk, PlaceMarker pl): return DoPlaceMarker(pmk, pl);
                 case (PendingAbilityWindow, DoneAbilities):
                     Pending = null;
                     EndPhaseFlow();
@@ -105,6 +106,8 @@ public sealed partial class GameEngine
         return action switch
         {
             DeployUnit d => DoDeploy(d),
+            DeployInReserve r => DoDeployInReserve(r),
+            ArriveFromReserve a => DoArrive(a),
             DeclareMove m => DoDeclareMove(m),
             Shoot s => DoShoot(s),
             DeclareCharge c => DoDeclareCharge(c),
@@ -124,14 +127,13 @@ public sealed partial class GameEngine
     {
         if (positions.Count != unit.Models.Count) return $"Expected {unit.Models.Count} positions.";
         var zone = State.TerritoryOf(unit.Owner);
-        float r = unit.BaseRadius;
         foreach (var p in positions)
         {
-            if (!zone.ContainsCircle(p, r)) return "Models must be set up wholly within your territory.";
-            if (OverlapsTerrain(p, r)) return "Models cannot be set up on impassable terrain.";
+            if (!Geo.Inside(zone, unit.BaseAt(p))) return "Models must be set up wholly within your territory.";
+            if (OverlapsTerrain(unit.BaseAt(p))) return "Models cannot be set up on impassable terrain.";
         }
         if (Overlaps(unit, positions)) return "Models cannot overlap other models.";
-        if (!Geo.IsCoherent(positions, r)) return "Unit must be set up in coherency.";
+        if (!Geo.IsCoherent(positions.Select(unit.BaseAt).ToList(), CoherencyRange(unit))) return "Unit must be set up in coherency.";
         return null;
     }
 
@@ -141,23 +143,29 @@ public sealed partial class GameEngine
         var unit = State.GetUnit(d.UnitId);
         if (unit.Owner != d.Player) return ActionResult.Fail("Not your unit.");
         if (unit.Deployed) return ActionResult.Fail("Unit already deployed.");
+        if (d.Facing is float facing) unit.Facing = facing;
         var error = ValidateDeployment(unit, d.Positions);
         if (error != null) return ActionResult.Fail(error);
 
         for (int i = 0; i < unit.Models.Count; i++) unit.Models[i].Position = d.Positions[i];
         unit.Deployed = true;
         State.Write($"{State.Players[d.Player].Name} deploys {unit.Name}.");
+        AfterDeploy(d.Player);
+        return ActionResult.Success;
+    }
 
-        bool mineLeft = State.UnitsOf(d.Player).Any(u => !u.Deployed);
-        bool theirsLeft = State.UnitsOf(1 - d.Player).Any(u => !u.Deployed);
-        if (!mineLeft && _firstFinishedDeploying < 0) _firstFinishedDeploying = d.Player;
-        if (theirsLeft) _deployingPlayer = 1 - d.Player;
+    /// <summary>Decides who deploys next, and starts the battle when everyone is done.</summary>
+    private void AfterDeploy(int player)
+    {
+        bool mineLeft = State.UnitsOf(player).Any(u => !u.Deployed);
+        bool theirsLeft = State.UnitsOf(1 - player).Any(u => !u.Deployed);
+        if (!mineLeft && _firstFinishedDeploying < 0) _firstFinishedDeploying = player;
+        if (theirsLeft) _deployingPlayer = 1 - player;
         else if (!mineLeft)
         {
-            if (_firstFinishedDeploying < 0) _firstFinishedDeploying = 1 - d.Player;
+            if (_firstFinishedDeploying < 0) _firstFinishedDeploying = 1 - player;
             StartBattleRound(1);
         }
-        return ActionResult.Success;
     }
 
     // ------------------------------------------------------------------ Rounds, turns, phases
@@ -194,7 +202,9 @@ public sealed partial class GameEngine
         if (p0.VictoryPoints < p1.VictoryPoints) p0.CommandPoints++;
         else if (p1.VictoryPoints < p0.VictoryPoints) p1.CommandPoints++;
 
-        StartTurn(first);
+        if (round >= LastReserveRound + 1) DestroyLateReserves();
+        if (State.Phase == Phase.GameOver) return;
+        OfferRoundStartMarkers([first, 1 - first], () => StartTurn(first));
     }
 
     private void StartTurn(int player)
@@ -202,7 +212,7 @@ public sealed partial class GameEngine
         State.ActivePlayer = player;
         foreach (var u in State.Units)
         {
-            u.Moved = u.Ran = u.Retreated = u.Charged = u.ChargeAttempted = false;
+            u.Moved = u.Ran = u.Retreated = u.Charged = u.ChargeAttempted = u.SetUpThisTurn = false;
             u.Buffs.RemoveAll(b => b.Expiry == Expiry.EndOfTurn);
         }
         foreach (var p in State.Players) p.SpellsCastThisTurn.Clear();
@@ -310,7 +320,8 @@ public sealed partial class GameEngine
     private void CheckWipeout()
     {
         if (State.Phase is Phase.Deployment or Phase.GameOver) return;
-        bool dead0 = !State.LiveUnitsOf(0).Any(), dead1 = !State.LiveUnitsOf(1).Any();
+        bool Wiped(int p) => !State.LiveUnitsOf(p).Any() && !State.UnitsOf(p).Any(u => u.InReserve);
+        bool dead0 = Wiped(0), dead1 = Wiped(1);
         if (dead0 && dead1) { State.IsDraw = true; EndGame("Both armies have been destroyed."); }
         else if (dead0) { State.Winner = 1; EndGame($"{State.Players[0].Name} has been wiped out."); }
         else if (dead1) { State.Winner = 0; EndGame($"{State.Players[1].Name} has been wiped out."); }
@@ -352,22 +363,22 @@ public sealed partial class GameEngine
 
     // ------------------------------------------------------------------ Shared helpers
 
-    private bool OverlapsTerrain(Vector2 p, float r) =>
-        State.Battleplan.Terrain.Any(t => t.Impassable && Geo.CircleIntersectsRect(p, r, t.Area.ToRect()));
+    private bool OverlapsTerrain(Base b) =>
+        State.Battleplan.Terrain.Any(t => t.Impassable && Geo.Touches(b, t.Area.ToRect()));
 
-    /// <summary>True if any of the positions overlap each other or any other deployed model.</summary>
+    /// <summary>True if any of the positions overlap each other or any other model on the battlefield.</summary>
     private bool Overlaps(Unit unit, IReadOnlyList<Vector2> positions)
     {
-        float r = unit.BaseRadius;
-        for (int i = 0; i < positions.Count; i++)
+        var bases = positions.Select(unit.BaseAt).ToList();
+        for (int i = 0; i < bases.Count; i++)
         {
-            for (int j = i + 1; j < positions.Count; j++)
-                if (Geo.Overlaps(positions[i], r, positions[j], r)) return true;
+            for (int j = i + 1; j < bases.Count; j++)
+                if (Geo.Overlaps(bases[i], bases[j])) return true;
             foreach (var other in State.Units)
             {
                 if (other == unit || !other.OnBattlefield) continue;
                 foreach (var m in other.Alive)
-                    if (Geo.Overlaps(positions[i], r, m.Position, other.BaseRadius)) return true;
+                    if (Geo.Overlaps(bases[i], other.BaseOf(m))) return true;
             }
         }
         return false;

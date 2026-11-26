@@ -1,4 +1,5 @@
 using AgeOfHammer.Core.Engine;
+using AgeOfHammer.Core.Geometry;
 using AgeOfHammer.Core.State;
 using Godot;
 using NVec = System.Numerics.Vector2;
@@ -60,8 +61,44 @@ public partial class BoardView : Node2D
         if (Screen?.Engine == null) return;
         DrawBattlefield();
         DrawObjectives();
+        DrawMarkers();
         DrawUnits();
         DrawOverlays();
+    }
+
+    /// <summary>Outline of a base (circle or stadium) in board pixels, optionally grown by <paramref name="growPx"/> screen pixels.</summary>
+    private Vector2[] BaseOutline(Base b, float growPx = 0)
+    {
+        float r = b.Radius * Px + growPx * OnePixel;
+        var a = G(b.A);
+        var c = G(b.B);
+        float angle = b.IsRound ? 0 : Mathf.Atan2(b.Half.Y, b.Half.X);
+        const int n = 14;
+        var pts = new Vector2[2 * (n + 1)];
+        for (int i = 0; i <= n; i++)
+        {
+            float t1 = angle - Mathf.Pi / 2 + Mathf.Pi * i / n;   // around B
+            float t2 = angle + Mathf.Pi / 2 + Mathf.Pi * i / n;   // around A
+            pts[i] = c + new Vector2(Mathf.Cos(t1), Mathf.Sin(t1)) * r;
+            pts[n + 1 + i] = a + new Vector2(Mathf.Cos(t2), Mathf.Sin(t2)) * r;
+        }
+        return pts;
+    }
+
+    private void FillBase(Base b, Color color, float growPx = 0)
+    {
+        if (b.IsRound) DrawCircle(G(b.Center), b.Radius * Px + growPx * OnePixel, color, true, -1, true);
+        else DrawColoredPolygon(BaseOutline(b, growPx), color);
+    }
+
+    private void OutlineBase(Base b, Color color, float widthPx, float growPx)
+    {
+        if (b.IsRound) { Ring(G(b.Center), b.Radius * Px + growPx * OnePixel, color, widthPx, 32); return; }
+        var pts = BaseOutline(b, growPx);
+        var closed = new Vector2[pts.Length + 1];
+        pts.CopyTo(closed, 0);
+        closed[^1] = pts[0];
+        DrawPolyline(closed, color, widthPx * OnePixel, true);
     }
 
     private void Ring(Vector2 center, float radius, Color color, float widthPx, int points = 48) =>
@@ -106,6 +143,17 @@ public partial class BoardView : Node2D
         }
     }
 
+    private void DrawMarkers()
+    {
+        foreach (var m in Screen.S.Markers)
+        {
+            var pos = G(m.Position);
+            DrawCircle(pos, m.Radius * Px, new Color(0.1f, 0.08f, 0.05f, 0.95f), true, -1, true);
+            Ring(pos, m.Radius * Px, Screen.Colors[m.Owner], 2.5f, 32);
+            Ring(pos, m.Radius * 0.55f * Px, Screen.Colors[m.Owner] with { A = 0.5f }, 1.5f, 24);
+        }
+    }
+
     private void DrawUnits()
     {
         var s = Screen.S;
@@ -123,21 +171,22 @@ public partial class BoardView : Node2D
                 var pos = G(m.Position);
                 if (pendingMove?.Unit == u && Screen.HumanDecides)
                 {
-                    DrawCircle(pos, r, baseColor with { A = 0.25f }, true, -1, true);
+                    FillBase(u.BaseOf(m), baseColor with { A = 0.25f });
                     continue;
                 }
-                DrawCircle(pos, r, Colors.Black, true, -1, true);
-                DrawCircle(pos, r - 1.5f * px, dim ? baseColor.Lerp(Colors.Gray, 0.55f) : baseColor, true, -1, true);
+                var b = u.BaseOf(m);
+                FillBase(b, Colors.Black);
+                FillBase(b, dim ? baseColor.Lerp(Colors.Gray, 0.55f) : baseColor, -1.5f);
                 if (u.Warscroll.IsHero) Ring(pos, r * 0.6f, new Color(0, 0, 0, 0.7f), 2, 24);
                 if (m.Damage > 0)
                 {
                     float frac = m.Damage / (float)u.Warscroll.Health;
                     DrawCircle(pos, r * 0.55f * Mathf.Sqrt(frac), Palette.Bad, true, -1, true);
                 }
-                if (u == Screen.Selected) Ring(pos, r + 3 * px, Colors.White, 2, 32);
-                else if (targets.Contains(u)) Ring(pos, r + 3 * px, Palette.Bad, 2.5f, 32);
-                else if (reaction != null && reaction.Eligible.Contains(u)) Ring(pos, r + 3 * px, Palette.Accent, 2.5f, 32);
-                else if (u == Screen.Hovered) Ring(pos, r + 2 * px, new Color(1, 1, 1, 0.5f), 1.5f, 32);
+                if (u == Screen.Selected) OutlineBase(b, Colors.White, 2, 3);
+                else if (targets.Contains(u)) OutlineBase(b, Palette.Bad, 2.5f, 3);
+                else if (reaction != null && reaction.Eligible.Contains(u)) OutlineBase(b, Palette.Accent, 2.5f, 3);
+                else if (u == Screen.Hovered) OutlineBase(b, new Color(1, 1, 1, 0.5f), 1.5f, 2);
             }
         }
     }
@@ -152,7 +201,22 @@ public partial class BoardView : Node2D
         {
             var pos = Screen.DeploymentPositions(deploy);
             bool ok = engine.ValidateDeployment(deploy, pos) == null;
-            foreach (var p in pos) DrawCircle(G(p), deploy.BaseRadius * Px, (ok ? Palette.Good : Palette.Bad) with { A = 0.6f }, true, -1, true);
+            foreach (var p in pos) FillBase(deploy.BaseAt(p), (ok ? Palette.Good : Palette.Bad) with { A = 0.6f });
+        }
+
+        // Marker placement ghost
+        if (engine.Pending is PendingMarker pmk && Screen.HumanDecides && Screen.MouseOverBoard)
+        {
+            bool ok = engine.ValidateMarker(pmk.Decider, pmk.Def, Screen.MouseWorld) == null;
+            DrawCircle(G(Screen.MouseWorld), pmk.Def.Radius * Px, (ok ? Palette.Good : Palette.Bad) with { A = 0.6f }, true, -1, true);
+        }
+
+        // Reserve arrival ghost
+        if (Screen.ArrivingUnit is { } arriving && Screen.MouseOverBoard)
+        {
+            var pos = Screen.ArrivalPositions(arriving);
+            bool ok = engine.ValidateArrival(arriving, pos) == null;
+            foreach (var p in pos) FillBase(arriving.BaseAt(p), (ok ? Palette.Good : Palette.Bad) with { A = 0.6f });
         }
 
         // Pending move: allowance rings and the ghost formation following the mouse
@@ -160,7 +224,7 @@ public partial class BoardView : Node2D
         {
             var unit = pm.Unit;
             foreach (var m in unit.Alive)
-                Ring(G(m.Position), (pm.Allowance + unit.BaseRadius) * Px, new Color(1, 1, 1, 0.12f), 1.5f, 64);
+                Ring(G(m.Position), (pm.Allowance + unit.BaseReach) * Px, new Color(1, 1, 1, 0.12f), 1.5f, 64);
             var ghost = Screen.GhostPositions(pm);
             if (ghost != null && Screen.MouseOverBoard)
             {
@@ -169,7 +233,7 @@ public partial class BoardView : Node2D
                 for (int i = 0; i < ghost.Count && i < alive.Count; i++)
                 {
                     DrawLine(G(alive[i].Position), G(ghost[i]), new Color(1, 1, 1, 0.35f), 1.5f * OnePixel);
-                    DrawCircle(G(ghost[i]), unit.BaseRadius * Px, (ok ? Palette.Good : Palette.Bad) with { A = 0.65f }, true, -1, true);
+                    FillBase(unit.BaseAt(ghost[i]), (ok ? Palette.Good : Palette.Bad) with { A = 0.65f });
                 }
             }
         }

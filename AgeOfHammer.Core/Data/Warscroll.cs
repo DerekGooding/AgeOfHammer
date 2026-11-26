@@ -208,8 +208,12 @@ public sealed class AbilityDef
     public List<PassiveModifierDef> Modifiers { get; set; } = new();
     /// <summary>Optional: makes an active ability usable by the engine (see <see cref="ActivationDef"/>).</summary>
     public ActivationDef? Activate { get; set; }
+    /// <summary>Optional: puts units into, or brings them out of, a reserve pool (deep strike, tunnels...).</summary>
+    public ReserveDef? Reserve { get; set; }
+    /// <summary>Optional: lets the player place a battlefield marker (e.g. a Gnawhole) at this ability's timing.</summary>
+    public MarkerDef? Marker { get; set; }
 
-    [JsonIgnore] public bool IsScripted => Modifiers.Count > 0 || Activate != null || ScriptId != null;
+    [JsonIgnore] public bool IsScripted => Modifiers.Count > 0 || Activate != null || Reserve != null || Marker != null || ScriptId != null;
 
     /// <summary>How often it can be used, from the printed timing.</summary>
     [JsonIgnore]
@@ -270,7 +274,32 @@ public sealed class Warscroll
     public bool Verified { get; set; }
 
     [JsonIgnore] public string FactionId { get; set; } = "";
-    [JsonIgnore] public float BaseRadius => BaseSizeMm / 25.4f / 2f;
+    /// <summary>Half the base's width in inches (the radius of a round base).</summary>
+    [JsonIgnore] public float BaseRadius => OvalMm is (_, float w) ? w / 25.4f / 2f : BaseSizeMm / 25.4f / 2f;
+    /// <summary>For oval bases: half of (length - width) in inches, the half-length of the base's straight middle. 0 for round bases.</summary>
+    [JsonIgnore] public float BaseHalfLength => OvalMm is (float l, float w) ? (l - w) / 25.4f / 2f : 0f;
+
+    private (float Length, float Width)? _oval;
+    private bool _ovalParsed;
+
+    /// <summary>Length and width (mm) if <see cref="BaseSize"/> describes an oval such as "60 x 35mm".</summary>
+    [JsonIgnore]
+    public (float Length, float Width)? OvalMm
+    {
+        get
+        {
+            if (_ovalParsed) return _oval;
+            _ovalParsed = true;
+            var m = System.Text.RegularExpressions.Regex.Match(BaseSize ?? "", @"(\d+(?:\.\d+)?)\s*[×xX]\s*(\d+(?:\.\d+)?)\s*mm");
+            if (m.Success)
+            {
+                float a = float.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                float b = float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                _oval = (MathF.Max(a, b), MathF.Min(a, b));
+            }
+            return _oval;
+        }
+    }
     [JsonIgnore] public bool IsHero => HasKeyword("Hero");
     [JsonIgnore] public bool CanFly => HasKeyword("Fly");
     [JsonIgnore] public bool IsWizard => WizardLevel > 0;
@@ -278,6 +307,42 @@ public sealed class Warscroll
     [JsonIgnore] public IEnumerable<WeaponProfile> MeleeWeapons => Weapons.Where(w => w.IsMelee);
 
     public bool HasKeyword(string keyword) => Keywords.Any(k => string.Equals(k, keyword, StringComparison.OrdinalIgnoreCase));
+}
+
+/// <summary>
+/// Reserve rules: <see cref="Declare"/> lets units be set up in the named pool during deployment (they count as
+/// deployed); <see cref="Arrive"/> lets units in that pool be set up on the battlefield in the movement phase.
+/// </summary>
+public sealed class ReserveDef
+{
+    /// <summary>Name of the reserve, e.g. "Celestial Realm" or "tunnels below".</summary>
+    public string Pool { get; set; } = "reserve";
+    public bool Declare { get; set; }
+    public ArrivalDef? Arrive { get; set; }
+    /// <summary>For declare abilities: only units with all of these keywords may go into the pool.</summary>
+    public List<string> Keywords { get; set; } = new();
+}
+
+public sealed class ArrivalDef
+{
+    /// <summary>Every model must be set up more than this far from all enemy units.</summary>
+    public float MinEnemyDistance { get; set; } = 9;
+    /// <summary>If set, every model must be wholly within <see cref="MarkerRange"/> of a friendly marker with this name.</summary>
+    public string? Marker { get; set; }
+    public float MarkerRange { get; set; } = 6;
+    /// <summary>First battle round in which units can arrive (the core rules forbid round 1).</summary>
+    public int FromRound { get; set; } = 2;
+}
+
+/// <summary>A placeable battlefield marker, e.g. a Skaven Gnawhole.</summary>
+public sealed class MarkerDef
+{
+    public string Name { get; set; } = "Marker";
+    public float MinEnemyDistance { get; set; }
+    public float MinObjectiveDistance { get; set; }
+    public float MinTerrainDistance { get; set; }
+    /// <summary>Size used for drawing and for "wholly within" measurements (inches).</summary>
+    public float Radius { get; set; } = 1.5f;
 }
 
 /// <summary>A named group of faction rules, e.g. a battle formation or a spell lore.</summary>

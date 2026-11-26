@@ -31,6 +31,8 @@ public partial class BattleScreen : Node
     public Unit? Selected { get; private set; }
     public Unit? Hovered { get; private set; }
     public Unit? DeployUnit { get; private set; }
+    /// <summary>A reserve unit the human is placing on the battlefield.</summary>
+    public Unit? ArrivingUnit { get; private set; }
     public TargetMode Mode { get; private set; }
     public NVec MouseWorld { get; private set; }
     public bool MouseOverBoard { get; private set; }
@@ -38,6 +40,8 @@ public partial class BattleScreen : Node
     private readonly AiPlayer?[] _ai = new AiPlayer?[2];
     private readonly int[] _perRowOptions = [5, 10, 3, 2, 1];
     private int _perRowIndex;
+    /// <summary>Orientation for oval bases when deploying or arriving (T rotates by 90 degrees).</summary>
+    private float _facing;
     private int _spellIndex;
     private string _abilityName = "";
     private bool _allOutAttack;
@@ -217,6 +221,7 @@ public partial class BattleScreen : Node
             (DeployUnit == null || DeployUnit.Deployed || DeployUnit.Owner != Decider))
             DeployUnit = S.UnitsOf(Decider).FirstOrDefault(u => !u.Deployed);
         if (Selected != null && !Selected.OnBattlefield && S.Phase != Phase.Deployment) Selected = null;
+        if (ArrivingUnit != null && (!HumanDecides || !Engine.CanArrive(ArrivingUnit))) ArrivingUnit = null;
 
         if (S.Phase != Phase.GameOver && Decider >= 0 && _ai[Decider] is { } ai && !_aiPaused)
         {
@@ -268,7 +273,7 @@ public partial class BattleScreen : Node
     {
         foreach (var u in S.Units.Where(u => u.OnBattlefield))
             foreach (var m in u.Alive)
-                if (NVec.Distance(m.Position, world) <= u.BaseRadius) return u;
+                if (u.BaseOf(m).Contains(world)) return u;
         return null;
     }
 
@@ -292,6 +297,9 @@ public partial class BattleScreen : Node
                 break;
             case Key.R:
                 _perRowIndex = (_perRowIndex + 1) % _perRowOptions.Length;
+                break;
+            case Key.T:
+                _facing = _facing == 0 ? Mathf.Pi / 2 : 0;
                 break;
             case Key.F:
                 FitCamera();
@@ -331,7 +339,18 @@ public partial class BattleScreen : Node
 
         if (HumanDecides && S.Phase == Phase.Deployment && Engine.Pending == null && DeployUnit != null)
         {
-            Do(new DeployUnit(d, DeployUnit.Id, DeploymentPositions(DeployUnit)));
+            Do(new DeployUnit(d, DeployUnit.Id, DeploymentPositions(DeployUnit), _facing));
+            return;
+        }
+        if (HumanDecides && Engine.Pending is PendingMarker pmk)
+        {
+            Do(new PlaceMarker(d, MouseWorld));
+            return;
+        }
+        if (HumanDecides && ArrivingUnit != null && Engine.Pending == null)
+        {
+            Do(new ArriveFromReserve(d, ArrivingUnit.Id, ArrivalPositions(ArrivingUnit), _facing));
+            if (ArrivingUnit.OnBattlefield) { Selected = ArrivingUnit; ArrivingUnit = null; }
             return;
         }
         if (HumanDecides && Engine.Pending is PendingMove pm)
@@ -373,7 +392,15 @@ public partial class BattleScreen : Node
     public List<NVec> DeploymentPositions(Unit unit)
     {
         int perRow = Math.Max(1, Math.Min(_perRowOptions[_perRowIndex], unit.Models.Count));
-        return Geo.Formation(unit.Models.Count, unit.BaseRadius, MouseWorld, perRow);
+        unit.Facing = _facing; // not yet on the battlefield: safe to preview the chosen orientation
+        return Geo.Formation(unit.Models.Count, unit.BaseExtent, MouseWorld, perRow);
+    }
+
+    public List<NVec> ArrivalPositions(Unit unit)
+    {
+        int perRow = Math.Max(1, Math.Min(_perRowOptions[_perRowIndex], unit.AliveCount));
+        unit.Facing = _facing; // in reserve: safe to preview the chosen orientation
+        return Geo.Formation(unit.AliveCount, unit.BaseExtent, MouseWorld, perRow);
     }
 
     public List<NVec>? GhostPositions(PendingMove pm)
@@ -451,7 +478,7 @@ public partial class BattleScreen : Node
         var pending = Engine.Pending;
         string sig = string.Join("|", S.Phase, Decider, pending?.GetType().Name, (pending as PendingMove)?.Allowance,
             (pending as PendingMove)?.CanReroll, Selected?.Id, Selected?.AliveCount, Selected?.WoundsRemaining, Mode, _allOutAttack,
-            S.Log.Count, DeployUnit?.Id, S.Players[0].CommandPoints, S.Players[1].CommandPoints);
+            S.Log.Count, DeployUnit?.Id, S.Players[0].CommandPoints, S.Players[1].CommandPoints, ArrivingUnit?.Id, S.Markers.Count);
         if (sig != _panelSignature)
         {
             _panelSignature = sig;
@@ -486,12 +513,20 @@ public partial class BattleScreen : Node
         switch (Engine.Pending)
         {
             case null when S.Phase == Phase.Deployment:
-                Text("Deploy your units wholly within your territory (shaded). Click the board to place the selected unit. R changes formation.", Palette.TextDim);
+                Text("Deploy your units wholly within your territory (shaded). Click the board to place the selected unit. R changes formation, T rotates oval bases.", Palette.TextDim);
                 foreach (var u in S.UnitsOf(d).Where(u => !u.Deployed).Take(12))
                 {
                     var unit = u;
                     Btn($"{u.Name} ({u.Models.Count})", () => { DeployUnit = unit; _panelSignature = ""; }, on: u == DeployUnit);
                 }
+                if (DeployUnit != null)
+                    foreach (var pool in Engine.ReservePools(DeployUnit))
+                    {
+                        var (unit, p) = (DeployUnit, pool);
+                        Btn($"Set up in reserve: {p} ({Engine.ReservedCount(d)}/{Engine.ReserveLimit(d)})",
+                            () => Do(new DeployInReserve(d, unit.Id, p)), Engine.CanDeployInReserve(unit, p),
+                            tip: "Reserve units arrive from battle round 2 (see the faction's battle traits) and are destroyed if still in reserve at the start of battle round 4.");
+                    }
                 Btn("Auto-place this unit", () =>
                 {
                     if (DeployUnit == null) return;
@@ -523,6 +558,24 @@ public partial class BattleScreen : Node
                     Btn(u.Name, () => Do(new UseReaction(d, unit.Id)));
                 }
                 Btn("Decline", () => Do(new DeclineReaction(d)));
+                break;
+
+            case PendingMarker pmk:
+                Text($"{pmk.Source}: click the board to place a {pmk.Def.Name} (more than {pmk.Def.MinEnemyDistance}\" from enemies, " +
+                     $"{pmk.Def.MinObjectiveDistance}\" from objectives).", Palette.Accent);
+                Btn("Skip", () => Do(new PlaceMarker(d, null)));
+                break;
+
+            case null when S.Phase == Phase.Movement && (Engine.ArrivableUnits(d).Any() || S.UnitsOf(d).Any(u => u.InReserve)):
+                Text("Reserves:", Palette.Accent);
+                foreach (var r in S.UnitsOf(d).Where(u => u.InReserve))
+                {
+                    var unit = r;
+                    if (Engine.CanArrive(unit))
+                        Btn($"Arrive: {unit.Name} ({unit.ReservePool})", () => { ArrivingUnit = unit; _panelSignature = ""; }, on: ArrivingUnit == unit,
+                            tip: "Click the board to set the unit up. Green = legal.");
+                    else Text($"{unit.Name} waits in {unit.ReservePool}" + (S.BattleRound < 2 ? " (arrives from round 2)" : ""), Palette.TextDim);
+                }
                 break;
 
             case PendingAbilityWindow aw:

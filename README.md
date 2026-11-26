@@ -146,6 +146,7 @@ dotnet run --project tools/AgeOfHammer.Import -- --refresh # download the latest
 - **Passive modifiers**, with conditions, weapon filters and auras.
 - **Activated abilities**, made of a target, a dice gate and effects, with once-per-turn and once-per-battle limits. The AI uses them too, and the opponent gets an ability window at the end of each phase.
 - **Automatic triggers**, such as end-of-turn heals.
+- **Reserves and markers**, such as Stormcast deep strike and Skaven tunnels and Gnawholes.
 
 **Current coverage.**
 - About 45% of Stormcast Eternals and Skaven warscroll abilities are scripted, plus the core spells.

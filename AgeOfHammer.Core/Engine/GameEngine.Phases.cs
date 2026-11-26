@@ -47,15 +47,15 @@ public sealed partial class GameEngine
 
     private bool TryPlaceReturningModel(Unit unit, Model dead)
     {
-        float r = unit.BaseRadius;
         foreach (var anchor in unit.Alive.ToList())
             for (int a = 0; a < 12; a++)
             {
                 float ang = a * MathF.PI / 6;
-                var p = anchor.Position + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * (2 * r + 0.2f);
-                if (!State.Bounds.ContainsCircle(p, r) || OverlapsTerrain(p, r)) continue;
-                if (OverlapsAnything(unit, p, r)) continue;
-                if (State.EnemiesOf(unit).Any(e => e.Alive.Any(em => Geo.Distance(p, r, em.Position, e.BaseRadius) <= Geo.CombatRange))) continue;
+                var p = anchor.Position + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * (2 * unit.BaseReach + 0.2f);
+                var b = unit.BaseAt(p);
+                if (!Geo.Inside(State.Bounds, b) || OverlapsTerrain(b)) continue;
+                if (OverlapsAnything(b)) continue;
+                if (State.EnemiesOf(unit).Any(e => e.Alive.Any(em => Geo.Distance(b, e.BaseOf(em)) <= Geo.CombatRange))) continue;
                 dead.Slain = false;
                 dead.Damage = 0;
                 dead.Position = p;
@@ -64,8 +64,8 @@ public sealed partial class GameEngine
         return false;
     }
 
-    private bool OverlapsAnything(Unit self, Vector2 p, float r) =>
-        State.Units.Where(u => u.OnBattlefield).Any(u => u.Alive.Any(m => Geo.Overlaps(p, r, m.Position, u.BaseRadius)));
+    private bool OverlapsAnything(Base b) =>
+        State.Units.Where(u => u.OnBattlefield).Any(u => u.Alive.Any(m => Geo.Overlaps(b, u.BaseOf(m))));
 
     public bool CanCast(Unit unit) =>
         State.Phase == Phase.Hero && Pending == null && unit.Owner == State.ActivePlayer && unit.OnBattlefield
@@ -190,7 +190,6 @@ public sealed partial class GameEngine
         var unit = pm.Unit;
         var alive = unit.Alive.ToList();
         if (positions.Count != alive.Count) return $"Expected {alive.Count} positions.";
-        float r = unit.BaseRadius;
         bool fly = unit.Warscroll.CanFly;
         var enemies = State.EnemiesOf(unit).ToList();
 
@@ -198,31 +197,35 @@ public sealed partial class GameEngine
         {
             var from = alive[i].Position;
             var to = positions[i];
+            var fromBase = unit.BaseAt(from);
+            var toBase = unit.BaseAt(to);
             if (Vector2.Distance(from, to) > pm.Allowance + Geo.Epsilon)
                 return $"A model would move {Vector2.Distance(from, to):0.0}\" (max {pm.Allowance:0.0}\").";
-            if (!State.Bounds.ContainsCircle(to, r)) return "Models must stay on the battlefield.";
+            if (!Geo.Inside(State.Bounds, toBase)) return "Models must stay on the battlefield.";
             if (!fly)
                 foreach (var t in State.Battleplan.Terrain.Where(t => t.Impassable))
-                    if (Geo.SweptCircleHitsRect(from, to, r, t.Area.ToRect())) return $"Models cannot move through {t.Name}.";
+                    if (Geo.SweepTouches(fromBase, toBase, t.Area.ToRect())) return $"Models cannot move through {t.Name}.";
 
             if (pm.Kind is MoveKind.Normal or MoveKind.Run or MoveKind.Redeploy or MoveKind.Retreat)
                 foreach (var e in enemies)
                     foreach (var em in e.Alive)
                     {
-                        if (Geo.Distance(to, r, em.Position, e.BaseRadius) <= Geo.CombatRange)
+                        var enemyBase = e.BaseOf(em);
+                        if (Geo.Distance(toBase, enemyBase) <= Geo.CombatRange)
                             return "Models cannot end this move in combat range (3\") of an enemy.";
+                        // Passing through: measured along the centre path, using the bases' full reach (slightly cautious for ovals).
                         if (pm.Kind != MoveKind.Retreat
-                            && Geo.SegmentPointDistance(from, to, em.Position) - r - e.BaseRadius < Geo.CombatRange - Geo.Epsilon)
+                            && Geo.SegmentPointDistance(from, to, em.Position) - unit.BaseReach - e.BaseReach < Geo.CombatRange - Geo.Epsilon)
                             return "Models cannot move through combat range of an enemy.";
                     }
         }
         if (Overlaps(unit, positions)) return "Models cannot overlap other models.";
-        if (!Geo.IsCoherent(positions, r, CoherencyRange(unit))) return "Unit must end its move in coherency.";
+        if (!Geo.IsCoherent(positions.Select(unit.BaseAt).ToList(), CoherencyRange(unit))) return "Unit must end its move in coherency.";
 
         if (pm.Kind == MoveKind.Charge)
         {
             bool reached = enemies.Any(e => e.Alive.Any(em => positions.Any(p =>
-                Geo.Distance(p, r, em.Position, e.BaseRadius) <= Geo.ChargeEndRange + Geo.Epsilon)));
+                Geo.Distance(unit.BaseAt(p), e.BaseOf(em)) <= Geo.ChargeEndRange + Geo.Epsilon)));
             if (!reached) return "A charging unit must end within 1/2\" of an enemy unit.";
         }
         return null;

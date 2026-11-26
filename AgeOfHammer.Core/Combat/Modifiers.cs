@@ -100,9 +100,10 @@ public static class Modifiers
     {
         foreach (var m in unit.Alive)
         {
+            // Approximation: the far edge of the model's base is at most its gap plus its full length away.
             float best = float.MaxValue;
             foreach (var o in of.Alive)
-                best = MathF.Min(best, System.Numerics.Vector2.Distance(m.Position, o.Position) - of.BaseRadius + unit.BaseRadius);
+                best = MathF.Min(best, Geo.Gap(unit.BaseOf(m), of.BaseOf(o)) + 2 * unit.BaseReach);
             if (best > range + Geo.Epsilon) return false;
         }
         return true;
@@ -113,6 +114,7 @@ public static class Modifiers
     /// being modified, target = the other unit in the attack or ability):
     /// charged, notCharged, chargedThisPhase, damaged, damagePoints&gt;=N, damagePoints&lt;N, inCombat, notInCombat,
     /// notMoved, engagedWithCharger (in combat with an enemy that charged this turn), targetWithin:N,
+    /// setUpThisTurn, targetSetUpThisTurn,
     /// contesting, contestingFriendlyTerritory, keyword:X, keywordAny:A|B,
     /// targetModels&gt;=N, targetKeyword:X, targetHealth&gt;=N, targetCharged, targetDamaged, targetNotFly.
     /// Unknown terms are false, so a typo never silently applies a bonus.
@@ -142,6 +144,8 @@ public static class Modifiers
             case "targetDamaged": return target != null && target.DamagePoints > 0;
             case "targetNotFly": return target != null && !target.Warscroll.CanFly;
             case "notMoved": return !self.Moved;
+            case "setUpThisTurn": return self.SetUpThisTurn;
+            case "targetSetUpThisTurn": return target?.SetUpThisTurn == true;
             case "engagedWithCharger": return state.EnemiesInCombatWith(self).Any(e => e.Charged);
         }
         if (term.StartsWith("damagePoints>=")) return self.DamagePoints >= N(term, "damagePoints>=");
@@ -161,7 +165,7 @@ public static class Modifiers
         foreach (var o in state.Objectives)
         {
             if (friendlyTerritoryOnly && !territory.ContainsCircle(o.Position, Objective.MarkerRadius)) continue;
-            if (unit.Alive.Any(m => Geo.Distance(m.Position, unit.BaseRadius, o.Position, Objective.MarkerRadius) <= Objective.ControlRange + Geo.Epsilon))
+            if (unit.Alive.Any(m => Geo.Distance(unit.BaseOf(m), Base.Circle(o.Position, Objective.MarkerRadius)) <= Objective.ControlRange + Geo.Epsilon))
                 return true;
         }
         return false;

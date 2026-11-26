@@ -41,7 +41,6 @@ public static class Placement
     public static List<Vector2>? AutoCharge(GameEngine engine, PendingMove pm, Unit target)
     {
         var unit = pm.Unit;
-        float r = unit.BaseRadius, rt = target.BaseRadius;
 
         // 1) Translate the formation along the closest model pair.
         var (ma, mb, gap) = ClosestPair(unit, target);
@@ -65,7 +64,7 @@ public static class Placement
             for (float t = 0; t <= pm.Allowance + Geo.Epsilon; t += 0.1f)
             {
                 var pos = Translate(unit, dir2 * t);
-                float closest = pos.Min(p => target.Alive.Min(m => Geo.Gap(p, r, m.Position, rt)));
+                float closest = pos.Min(p => target.Alive.Min(m => Geo.Gap(unit.BaseAt(p), target.BaseOf(m))));
                 if (closest < -Geo.Epsilon) break;
                 if (closest <= Geo.ChargeEndRange - 0.05f && engine.ValidateMove(pm, pos) == null) return pos;
             }
@@ -75,7 +74,7 @@ public static class Placement
         var state = engine.State;
         var positions = unit.AlivePositions;
         var order = Enumerable.Range(0, positions.Count)
-            .OrderBy(i => target.Alive.Min(m => Geo.Gap(positions[i], r, m.Position, rt))).ToList();
+            .OrderBy(i => target.Alive.Min(m => Geo.Gap(unit.BaseAt(positions[i]), target.BaseOf(m)))).ToList();
         foreach (var i in order)
             positions[i] = StepToward(state, unit, positions, i, target, pm.Allowance);
         return engine.ValidateMove(pm, positions) == null ? positions : null;
@@ -86,12 +85,11 @@ public static class Placement
     {
         var original = unit.AlivePositions;
         var positions = new List<Vector2>(original);
-        float r = unit.BaseRadius, rt = target.BaseRadius;
         var order = Enumerable.Range(0, positions.Count)
-            .OrderBy(i => target.Alive.Min(m => Geo.Gap(positions[i], r, m.Position, rt))).ToList();
+            .OrderBy(i => target.Alive.Min(m => Geo.Gap(unit.BaseAt(positions[i]), target.BaseOf(m)))).ToList();
         foreach (var i in order)
             positions[i] = StepToward(state, unit, positions, i, target, PileInDistance);
-        if (Geo.IsCoherent(positions, r)) return positions;
+        if (Geo.IsCoherent(positions.Select(unit.BaseAt).ToList())) return positions;
 
         // Fall back to moving the whole formation, which preserves coherency.
         var (ma, mb, gap) = ClosestPair(unit, target);
@@ -109,18 +107,17 @@ public static class Placement
 
     private static Vector2 StepToward(GameState state, Unit unit, List<Vector2> positions, int i, Unit target, float maxMove)
     {
-        float r = unit.BaseRadius, rt = target.BaseRadius;
         var from = positions[i];
-        var nearest = target.Alive.OrderBy(m => Vector2.Distance(from, m.Position)).First();
-        float gap = Geo.Gap(from, r, nearest.Position, rt);
+        var nearest = target.Alive.OrderBy(m => Geo.Gap(unit.BaseAt(from), target.BaseOf(m))).First();
+        float gap = Geo.Gap(unit.BaseAt(from), target.BaseOf(nearest));
         if (gap <= ContactGap) return from;
         var dir = Vector2.Normalize(nearest.Position - from);
         float move = MathF.Min(maxMove, gap - ContactGap);
         for (float d = move; d > 0.05f; d -= 0.2f)
         {
             var p = from + dir * d;
-            if (!state.Bounds.ContainsCircle(p, r)) continue;
-            if (!unit.Warscroll.CanFly && state.Battleplan.Terrain.Any(t => t.Impassable && Geo.SweptCircleHitsRect(from, p, r, t.Area.ToRect())))
+            if (!Geo.Inside(state.Bounds, unit.BaseAt(p))) continue;
+            if (!unit.Warscroll.CanFly && state.Battleplan.Terrain.Any(t => t.Impassable && Geo.SweepTouches(unit.BaseAt(from), unit.BaseAt(p), t.Area.ToRect())))
                 continue;
             if (OverlapsAt(state, unit, positions, i, p)) continue;
             return p;
@@ -130,14 +127,14 @@ public static class Placement
 
     private static bool OverlapsAt(GameState state, Unit unit, List<Vector2> positions, int index, Vector2 p)
     {
-        float r = unit.BaseRadius;
+        var b = unit.BaseAt(p);
         for (int j = 0; j < positions.Count; j++)
-            if (j != index && Geo.Overlaps(p, r, positions[j], r)) return true;
+            if (j != index && Geo.Overlaps(b, unit.BaseAt(positions[j]))) return true;
         foreach (var other in state.Units)
         {
             if (other == unit || !other.OnBattlefield) continue;
             foreach (var m in other.Alive)
-                if (Geo.Overlaps(p, r, m.Position, other.BaseRadius)) return true;
+                if (Geo.Overlaps(b, other.BaseOf(m))) return true;
         }
         return false;
     }
@@ -156,10 +153,45 @@ public static class Placement
         foreach (var ma in a.Alive)
             foreach (var mb in b.Alive)
             {
-                float g = Geo.Gap(ma.Position, a.BaseRadius, mb.Position, b.BaseRadius);
+                float g = Geo.Gap(a.BaseOf(ma), b.BaseOf(mb));
                 if (g < best) { best = g; ba = ma.Position; bb = mb.Position; }
             }
         return (ba, bb, best);
+    }
+
+    /// <summary>Points spiralling out from <paramref name="center"/> (step 1", up to <paramref name="maxRadius"/>).</summary>
+    public static IEnumerable<Vector2> Spiral(Vector2 center, float maxRadius = 40)
+    {
+        yield return center;
+        for (float radius = 1; radius < maxRadius; radius += 1f)
+        {
+            int steps = (int)(radius * 6);
+            for (int s = 0; s < steps; s++)
+            {
+                float ang = s * MathF.Tau / steps;
+                yield return center + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * radius;
+            }
+        }
+    }
+
+    /// <summary>A legal arrival formation for a reserve unit as close to <paramref name="desired"/> as possible, or null.</summary>
+    public static List<Vector2>? FindArrival(GameEngine engine, Unit unit, Vector2 desired)
+    {
+        int perRow = unit.AliveCount >= 10 ? 10 : 5;
+        foreach (var c in Spiral(desired, 60))
+        {
+            var pos = Geo.Formation(unit.AliveCount, unit.BaseExtent, c, perRow);
+            if (engine.ValidateArrival(unit, pos) == null) return pos;
+        }
+        return null;
+    }
+
+    /// <summary>A legal marker position as close to <paramref name="desired"/> as possible, or null.</summary>
+    public static Vector2? FindMarkerSpot(GameEngine engine, int owner, Data.MarkerDef def, Vector2 desired)
+    {
+        foreach (var c in Spiral(desired, 60))
+            if (engine.ValidateMarker(owner, def, c) == null) return c;
+        return null;
     }
 
     /// <summary>A legal deployment formation as close to <paramref name="center"/> as possible, or null.</summary>
@@ -174,7 +206,7 @@ public static class Placement
             {
                 float ang = s * MathF.Tau / steps;
                 var c = zone.Clamp(center + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * radius);
-                var pos = Geo.Formation(unit.Models.Count, unit.BaseRadius, c, perRow);
+                var pos = Geo.Formation(unit.Models.Count, unit.BaseExtent, c, perRow);
                 if (engine.ValidateDeployment(unit, pos) == null) return pos;
             }
         }

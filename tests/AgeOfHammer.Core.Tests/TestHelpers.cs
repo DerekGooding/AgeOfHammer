@@ -69,6 +69,7 @@ public static class TestData
     {
         var u = new Unit { Id = id, Owner = owner, Warscroll = w, Deployed = true };
         var positions = Geometry.Geo.Formation(w.UnitSize, w.BaseRadius, at);
+        // (round bases in unit tests; ovals are covered in OvalBaseTests)
         for (int i = 0; i < w.UnitSize; i++) u.Models.Add(new Model { Index = i, Position = positions[i] });
         return u;
     }
@@ -93,11 +94,31 @@ public static class TestData
             int p = e.Decider;
             var unit = p == 0 ? u0[i0] : u1[i1];
             var at = p == 0 ? at0[i0++] : at1[i1++];
-            var pos = Geometry.Geo.Formation(unit.Models.Count, unit.BaseRadius, at);
+            var pos = Geometry.Geo.Formation(unit.Models.Count, unit.BaseExtent, at);
             var r = e.Submit(new DeployUnit(p, unit.Id, pos));
             if (!r.Ok) throw new InvalidOperationException(r.Error);
         }
         return e;
+    }
+
+    /// <summary>Plays "do nothing" decisions (end phase, decline, skip) until <paramref name="done"/> is true.</summary>
+    public static void AdvanceUntil(GameEngine e, Func<bool> done, int guard = 400)
+    {
+        while (!done())
+        {
+            if (--guard < 0) throw new InvalidOperationException("AdvanceUntil: condition never reached");
+            if (e.State.Phase == Phase.GameOver) throw new InvalidOperationException("Game ended first");
+            var r = e.Pending switch
+            {
+                PendingReaction => e.Submit(new DeclineReaction(e.Decider)),
+                PendingDefence => e.Submit(new RespondDefence(e.Decider, false)),
+                PendingMove => e.Submit(new CancelMove(e.Decider)),
+                PendingAbilityWindow => e.Submit(new DoneAbilities(e.Decider)),
+                PendingMarker => e.Submit(new PlaceMarker(e.Decider, null)),
+                _ => e.Submit(new EndPhase(e.Decider)),
+            };
+            if (!r.Ok) throw new InvalidOperationException(r.Error);
+        }
     }
 
     /// <summary>Ends phases until the engine reaches the requested phase for the active player.</summary>

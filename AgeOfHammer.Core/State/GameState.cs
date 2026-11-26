@@ -62,6 +62,10 @@ public sealed class Unit
     public List<Model> Models { get; } = new();
 
     public bool Deployed { get; set; }
+    /// <summary>The reserve pool the unit is waiting in (deployed but not on the battlefield), or null.</summary>
+    public string? ReservePool { get; set; }
+    /// <summary>The unit was set up on the battlefield this turn (e.g. arrived from reserve).</summary>
+    public bool SetUpThisTurn { get; set; }
 
     // Per-turn status
     public bool Moved { get; set; }
@@ -79,10 +83,21 @@ public sealed class Unit
 
     public string Name => Warscroll.Name;
     public float BaseRadius => Warscroll.BaseRadius;
+    /// <summary>Direction (radians) of the long axis of oval bases; 0 = along the battlefield's width.</summary>
+    public float Facing { get; set; }
+    /// <summary>The model base this unit would have at <paramref name="center"/>.</summary>
+    public Base BaseAt(Vector2 center) =>
+        new(center, new Vector2(MathF.Cos(Facing), MathF.Sin(Facing)) * Warscroll.BaseHalfLength, BaseRadius);
+    public Base BaseOf(Model m) => BaseAt(m.Position);
+    /// <summary>Bounding-box size of one base at the unit's facing (for laying out formations).</summary>
+    public Vector2 BaseExtent => BaseAt(Vector2.Zero).Extent;
+    /// <summary>Distance from a model's centre to the farthest point of its base.</summary>
+    public float BaseReach => Warscroll.BaseHalfLength + BaseRadius;
     public IEnumerable<Model> Alive => Models.Where(m => !m.Slain);
     public int AliveCount => Models.Count(m => !m.Slain);
     public bool IsDestroyed => AliveCount == 0;
-    public bool OnBattlefield => Deployed && !IsDestroyed;
+    public bool OnBattlefield => Deployed && !IsDestroyed && ReservePool == null;
+    public bool InReserve => Deployed && !IsDestroyed && ReservePool != null;
     public int WoundsRemaining => Alive.Sum(m => Warscroll.Health - m.Damage);
     public List<Vector2> AlivePositions => Alive.Select(m => m.Position).ToList();
     public Vector2 Centroid => Geo.Centroid(AlivePositions);
@@ -121,8 +136,19 @@ public sealed class Objective
     public int ControlledBy { get; set; } = -1;
 }
 
+/// <summary>A placed battlefield marker (e.g. a Gnawhole).</summary>
+public sealed class Marker
+{
+    public int Owner { get; init; }
+    public required string Name { get; init; }
+    public Vector2 Position { get; init; }
+    public float Radius { get; init; } = 1.5f;
+}
+
 public sealed class GameState
 {
+    public List<Marker> Markers { get; } = new();
+
     public required Battleplan Battleplan { get; init; }
     public required IDiceRoller Dice { get; init; }
     public Player[] Players { get; init; } = Array.Empty<Player>();
@@ -169,7 +195,7 @@ public sealed class GameState
         float best = float.MaxValue;
         foreach (var ma in a.Alive)
             foreach (var mb in b.Alive)
-                best = MathF.Min(best, Geo.Distance(ma.Position, a.BaseRadius, mb.Position, b.BaseRadius));
+                best = MathF.Min(best, Geo.Distance(a.BaseOf(ma), b.BaseOf(mb)));
         return best;
     }
 
@@ -177,7 +203,7 @@ public sealed class GameState
     {
         float best = float.MaxValue;
         foreach (var mb in target.Alive)
-            best = MathF.Min(best, Geo.Distance(m.Position, owner.BaseRadius, mb.Position, target.BaseRadius));
+            best = MathF.Min(best, Geo.Distance(owner.BaseOf(m), target.BaseOf(mb)));
         return best;
     }
 
@@ -212,7 +238,7 @@ public sealed class GameState
             int control = Math.Max(0, u.Warscroll.Control + Combat.Modifiers.Get(this, u, Stat.Control, AttackType.Any));
             if (Combat.Modifiers.Lowest(this, u, Stat.MaxControl) is int cap) control = Math.Min(control, cap);
             foreach (var m in u.Alive)
-                if (Geo.Distance(m.Position, u.BaseRadius, o.Position, Objective.MarkerRadius) <= Objective.ControlRange + Geo.Epsilon)
+                if (Geo.Distance(u.BaseOf(m), Base.Circle(o.Position, Objective.MarkerRadius)) <= Objective.ControlRange + Geo.Epsilon)
                     total += control;
         }
         return total;

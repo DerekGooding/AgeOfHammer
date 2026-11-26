@@ -33,7 +33,8 @@ public static class Commands
 /// <summary>Everything a player (human UI or AI) can do is expressed as one of these.</summary>
 public abstract record GameAction(int Player);
 
-public sealed record DeployUnit(int Player, int UnitId, IReadOnlyList<Vector2> Positions) : GameAction(Player);
+/// <summary>Sets a unit up. <paramref name="Facing"/> (radians) orients oval bases; null keeps the unit's current facing.</summary>
+public sealed record DeployUnit(int Player, int UnitId, IReadOnlyList<Vector2> Positions, float? Facing = null) : GameAction(Player);
 public sealed record DeclareMove(int Player, int UnitId, MoveKind Kind, bool AtTheDouble = false) : GameAction(Player);
 public sealed record CompleteMove(int Player, IReadOnlyList<Vector2> Positions) : GameAction(Player);
 public sealed record CancelMove(int Player) : GameAction(Player);
@@ -49,6 +50,12 @@ public sealed record UseReaction(int Player, int UnitId) : GameAction(Player);
 public sealed record DeclineReaction(int Player) : GameAction(Player);
 /// <summary>Uses a scripted ability. Targets may be empty for self abilities; extra targets are filled in by the engine.</summary>
 public sealed record UseAbility(int Player, int UnitId, string Ability, IReadOnlyList<int>? Targets = null) : GameAction(Player);
+/// <summary>Deployment: set the unit up in a reserve pool instead of on the battlefield.</summary>
+public sealed record DeployInReserve(int Player, int UnitId, string Pool) : GameAction(Player);
+/// <summary>Movement phase: set a reserve unit up on the battlefield.</summary>
+public sealed record ArriveFromReserve(int Player, int UnitId, IReadOnlyList<Vector2> Positions, float? Facing = null) : GameAction(Player);
+/// <summary>Answers a <see cref="PendingMarker"/>: a position, or null to skip.</summary>
+public sealed record PlaceMarker(int Player, Vector2? Position) : GameAction(Player);
 /// <summary>Closes an ability window (the non-active player has finished using abilities this phase).</summary>
 public sealed record DoneAbilities(int Player) : GameAction(Player);
 /// <summary>Ends the current phase. In the combat phase this passes (your remaining units do not fight).</summary>
@@ -83,6 +90,14 @@ public sealed class PendingDefence : PendingDecision
     public required Unit Attacker { get; init; }
     public required Unit Target { get; init; }
     public required Action<bool> Resume { get; init; }
+}
+
+/// <summary>The player may place a battlefield marker (e.g. a Gnawhole).</summary>
+public sealed class PendingMarker : PendingDecision
+{
+    public required AgeOfHammer.Core.Data.MarkerDef Def { get; init; }
+    public required string Source { get; init; }
+    public Action? Then { get; init; }
 }
 
 /// <summary>At the end of a phase the non-active player may use their abilities for that phase.</summary>
